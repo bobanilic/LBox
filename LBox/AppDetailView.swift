@@ -43,21 +43,11 @@ struct AppDetailView: View {
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 18) {
-                AsyncImage(url: URL(string: app.iconURL ?? "")) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        ZStack {
-                            Color(.secondarySystemBackground)
-                            Image(systemName: "app.fill")
-                                .font(.system(size: 42))
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
+                CachedRemoteImage(
+                    url: URL(string: app.iconURL ?? ""),
+                    contentMode: .fill,
+                    placeholderSystemImage: "app.fill"
+                )
                 .frame(width: 116, height: 116)
                 .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
                 .overlay {
@@ -125,18 +115,12 @@ struct AppDetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 12) {
                     ForEach(app.screenshotURLs, id: \.self) { urlString in
-                        AsyncImage(url: URL(string: urlString)) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFit()
-                            default:
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color(.secondarySystemBackground))
-                            }
-                        }
-                        .frame(height: 360)
+                        CachedRemoteImage(
+                            url: URL(string: urlString),
+                            contentMode: .fit,
+                            placeholderSystemImage: "photo"
+                        )
+                        .frame(width: 220, height: 360)
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }
                 }
