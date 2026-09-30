@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main  # Замените на master, если у вас основная ветка называется так
+      - main
+      - codex/ios27-performance-ui
 
 jobs:
   build:
