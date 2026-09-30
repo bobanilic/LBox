@@ -121,12 +121,17 @@ struct ContentView: View {
     // Removed conflictAlertBinding computed property in favor of local @State
     
     func performInitialSetup() async {
-        if viewModel.displayApps.isEmpty { await viewModel.fetchAllRepos() }
+        // Render the persisted catalogue first. Network refresh is intentionally non-blocking.
+        await viewModel.refreshDisplayApps()
+        
+        Task(priority: .utility) {
+            await viewModel.fetchAllRepos()
+        }
+        
         downloadManager.refreshFileList()
         downloadManager.refreshInstalledApps()
-        try? await Task.sleep(nanoseconds: 500_000_000)
         viewModel.checkForUpdates(installedApps: downloadManager.installedApps)
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        
         if !hasAskedForSetup && downloadManager.customLiveContainerFolder == nil {
             showSetupAlert = true
         }
@@ -161,42 +166,43 @@ struct ContentView: View {
 // MARK: - Store View
 struct StoreView: View {
     @ObservedObject var viewModel: AppStoreViewModel
+    
+    private let columns = [
+        GridItem(.flexible(), spacing: 16, alignment: .top),
+        GridItem(.flexible(), spacing: 16, alignment: .top)
+    ]
+    
     var body: some View {
         NavigationStack {
-            List {
-                if viewModel.isLoading && viewModel.fetchTotal > 0 {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Updating Repositories...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        ProgressView(value: Double(viewModel.fetchProgress), total: Double(viewModel.fetchTotal))
-                            .progressViewStyle(.linear)
-                        HStack {
-                            Spacer()
-                            Text("\(viewModel.fetchProgress)/\(viewModel.fetchTotal)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    storeControls
+                        .padding(.horizontal, 18)
+                        .padding(.top, 4)
+                        .padding(.bottom, 18)
+                    
+                    if viewModel.filteredApps.isEmpty && !viewModel.isLoading {
+                        ContentUnavailableView(
+                            "No Apps",
+                            systemImage: "square.grid.2x2",
+                            description: Text(viewModel.searchText.isEmpty ? "No apps are available from the enabled sources." : "No apps match your search.")
+                        )
+                        .padding(.top, 72)
+                    } else {
+                        LazyVGrid(columns: columns, alignment: .center, spacing: 22) {
+                            ForEach(viewModel.filteredApps) { app in
+                                NavigationLink(destination: AppDetailView(app: app, viewModel: viewModel)) {
+                                    StoreAppTile(app: app)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                }
-                
-                if !viewModel.savedRepos.isEmpty {
-                    Picker("Source", selection: $viewModel.selectedRepoID) {
-                        Text("All Sources").tag(String?.none)
-                        ForEach(viewModel.getEnabledLeafRepos()) { repo in
-                            Text(repo.name).tag(repo.name as String?)
-                        }
-                    }
-                    .pickerStyle(.menu).listRowBackground(Color.clear).padding(.bottom, 5)
-                }
-                ForEach(viewModel.filteredApps) { app in
-                    NavigationLink(destination: AppDetailView(app: app, viewModel: viewModel)) {
-                        AppListRow(app: app)
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 28)
                     }
                 }
             }
+            .background(Color(.systemBackground))
             .navigationTitle("Store")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -215,42 +221,147 @@ struct StoreView: View {
             .refreshable { await viewModel.fetchAllRepos() }
         }
     }
+    
+    private var storeControls: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Menu {
+                    Button("All Sources") {
+                        viewModel.selectedRepoID = nil
+                    }
+                    
+                    Divider()
+                    
+                    ForEach(viewModel.getEnabledLeafRepos()) { repo in
+                        Button {
+                            viewModel.selectedRepoID = repo.name
+                        } label: {
+                            if viewModel.selectedRepoID == repo.name {
+                                Label(repo.name, systemImage: "checkmark")
+                            } else {
+                                Text(repo.name)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text(viewModel.selectedRepoID ?? "All Sources")
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(Color(.secondarySystemBackground), in: Capsule())
+                }
+                
+                Spacer(minLength: 8)
+                
+                Text("\(viewModel.filteredApps.count) apps")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            if viewModel.isLoading && viewModel.fetchTotal > 0 {
+                VStack(spacing: 5) {
+                    ProgressView(
+                        value: Double(viewModel.fetchProgress),
+                        total: Double(max(viewModel.fetchTotal, 1))
+                    )
+                    .progressViewStyle(.linear)
+                    
+                    HStack {
+                        Text("Refreshing sources")
+                        Spacer()
+                        Text("\(viewModel.fetchProgress)/\(viewModel.fetchTotal)")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+                .transition(.opacity)
+            }
+        }
+    }
 }
 
-struct AppListRow: View {
+private struct StoreAppTile: View {
     let app: AppItem
-    @EnvironmentObject var downloadManager: DownloadManager
-    @EnvironmentObject var viewModel: AppStoreViewModel
-    var updateAvailable: Bool {
-        guard let installedVer = downloadManager.getInstalledVersion(bundleID: app.bundleIdentifier) else { return false }
-        return app.version.compare(installedVer, options: .numeric) == .orderedDescending
+    
+    @EnvironmentObject private var downloadManager: DownloadManager
+    
+    private var updateAvailable: Bool {
+        guard let installed = downloadManager.getInstalledVersion(bundleID: app.bundleIdentifier) else {
+            return false
+        }
+        return app.version.compare(installed, options: .numeric) == .orderedDescending
     }
+    
+    private var installed: Bool {
+        downloadManager.isAppInstalled(bundleID: app.bundleIdentifier)
+    }
+    
     var body: some View {
-        HStack(spacing: 16) {
-            AsyncImage(url: URL(string: app.iconURL ?? "")) { phase in
-                if let image = phase.image { image.resizable() } else { Color.gray.opacity(0.2) }
-            }.aspectRatio(contentMode: .fill).frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(app.name).font(.headline).lineLimit(1)
-                    if updateAvailable {
-                        Text("UPDATE").font(.system(size: 9, weight: .bold))
-                            .padding(4)
-                            .background(Color.blue.opacity(0.2))
-                            .foregroundColor(.blue)
-                            .clipShape(Capsule())
-                    } else if downloadManager.isAppInstalled(bundleID: app.bundleIdentifier) {
-                        Text("INSTALLED").font(.system(size: 9, weight: .bold))
-                            .padding(4)
-                            .background(Color.gray.opacity(0.2))
-                            .clipShape(Capsule())
-                    }
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack(alignment: .topTrailing) {
+                CachedRemoteImage(
+                    url: URL(string: app.iconURL ?? ""),
+                    contentMode: .fill,
+                    placeholderSystemImage: "app.fill"
+                )
+                .aspectRatio(1, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
                 }
-                if let r = app.sourceRepoName { Text("via " + r).font(.caption2).foregroundColor(.blue) }
-                if let d = app.localizedDescription { Text(d).font(.caption).foregroundColor(.secondary).lineLimit(2) }
+                
+                if updateAvailable {
+                    statusBadge("UPDATE")
+                } else if installed {
+                    statusBadge("INSTALLED")
+                }
             }
-            Spacer()
-        }.padding(.vertical, 4)
+            
+            Text(app.name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            
+            HStack(spacing: 4) {
+                Text("v\(app.version)")
+                if let repo = app.sourceRepoName, !repo.isEmpty {
+                    Text("•")
+                    Text(repo)
+                        .lineLimit(1)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            
+            if let description = app.localizedDescription, !description.isEmpty {
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(app.name), version \(app.version)")
+    }
+    
+    private func statusBadge(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(8)
     }
 }
 
@@ -627,7 +738,7 @@ struct SettingsView: View {
                     Button("Import Repos (JSON)") { showImporter = true }
                 }
                 Section("About") {
-                    Text("LBox v1.2")
+                    Text("LBox v1.3 Preview")
                     #if DEBUG
                     NavigationLink("Debug Logs") { DebugLogView() }
                     #endif
@@ -677,54 +788,307 @@ struct SettingsView: View {
     }
 }
 
-// [RepoManagementView and helpers preserved]
+// MARK: - Repository Management
 struct RepoManagementView: View {
-    @ObservedObject var viewModel: AppStoreViewModel; let parentID: String?
-    @State private var showAdd = false; @State private var showCopyAlert = false; @State private var pendingCopyRepo: SavedRepo? = nil; @State private var copyMode: CopyMode = .json
-    @State private var showRenameAlert = false; @State private var renameText = ""; @State private var pendingRenameRepo: SavedRepo? = nil; @State private var showMoveSheet = false; @State private var pendingMoveRepo: SavedRepo? = nil
-    enum CopyMode { case json, url }
-    var displayedRepos: [SavedRepo] { viewModel.getRepos(in: parentID) }
-    var isReadOnly: Bool { guard let pid = parentID, let parent = viewModel.getRepo(pid) else { return false }; return parent.isRemoteFolder }
+    @ObservedObject var viewModel: AppStoreViewModel
+    let parentID: String?
+    
+    @State private var showAdd = false
+    @State private var showCopyAlert = false
+    @State private var pendingCopyRepo: SavedRepo?
+    @State private var copyMode: CopyMode = .json
+    @State private var showRenameAlert = false
+    @State private var renameText = ""
+    @State private var pendingRenameRepo: SavedRepo?
+    @State private var showMoveSheet = false
+    @State private var pendingMoveRepo: SavedRepo?
+    
+    enum CopyMode {
+        case json
+        case url
+    }
+    
+    private var displayedRepos: [SavedRepo] {
+        viewModel.getRepos(in: parentID)
+    }
+    
+    private var isReadOnly: Bool {
+        guard let parentID, let parent = viewModel.getRepo(parentID) else {
+            return false
+        }
+        return parent.isRemoteFolder
+    }
+    
     var body: some View {
         List {
-            ForEach(displayedRepos) { repo in
-                HStack {
-                    if repo.isFolder {
-                        NavigationLink(destination: RepoManagementView(viewModel: viewModel, parentID: repo.id)) {
-                            HStack {
-                                if repo.isRemoteFolder { Image(systemName: "folder.badge.gear").foregroundColor(.purple) } else { Image(systemName: "folder.fill").foregroundColor(.blue) }
-                                VStack(alignment: .leading) { Text(repo.name).foregroundColor(repo.isEnabled ? .primary : .secondary); Text("\(repo.totalRepoCount) repos • \(repo.totalAppCount) apps").font(.caption).foregroundColor(.secondary) }
-                            }
+            if displayedRepos.isEmpty {
+                ContentUnavailableView(
+                    "No Sources",
+                    systemImage: "tray",
+                    description: Text(isReadOnly ? "This remote folder currently contains no sources." : "Add a repository or folder to get started.")
+                )
+                .listRowBackground(Color.clear)
+            } else {
+                ForEach(displayedRepos) { repo in
+                    repositoryRow(repo)
+                        .contextMenu {
+                            repositoryContextMenu(repo)
                         }
-                        Spacer(); Toggle("", isOn: Binding(get: { repo.isEnabled }, set: { val in viewModel.setRepoEnabled(id: repo.id, enabled: val) })).labelsHidden()
-                    } else {
-                        if case .loading = repo.fetchStatus { ProgressView().scaleEffect(0.5).frame(width: 30, height: 30) } else if case .error = repo.fetchStatus { Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red).frame(width: 30, height: 30) } else if case .waiting = repo.fetchStatus { Image(systemName: "clock.fill").foregroundColor(.gray).frame(width: 30, height: 30) } else { AsyncImage(url: URL(string: repo.iconURL ?? "")) { p in if let i = p.image { i.resizable() } else { Image(systemName: "server.rack") } }.frame(width: 30, height: 30).cornerRadius(6) }
-                        VStack(alignment: .leading) { Text(repo.name).foregroundColor(repo.isEnabled ? .primary : .secondary); Text(repo.url?.absoluteString ?? "").font(.caption).foregroundColor(.secondary).lineLimit(1) }
-                        Spacer(); Text("\(repo.appCount)").font(.caption).foregroundColor(.secondary); Toggle("", isOn: Binding(get: { repo.isEnabled }, set: { val in viewModel.setRepoEnabled(id: repo.id, enabled: val) })).labelsHidden()
-                    }
-                }.contextMenu {
-                    if repo.isFolder {
-                        if repo.isRemoteFolder { Button { Task { await viewModel.fetchRemoteFolderList(folderID: repo.id) } } label: { Label("Update List", systemImage: "arrow.triangle.2.circlepath") }; if let listURL = repo.repoListURL { Button { UIPasteboard.general.string = listURL.absoluteString } label: { Label("Copy Folder URL", systemImage: "link") } } }
-                        Button { pendingRenameRepo = repo; renameText = repo.name; showRenameAlert = true } label: { Label("Rename", systemImage: "pencil") }
-                    }
-                    Button { pendingMoveRepo = repo; showMoveSheet = true } label: { Label("Move...", systemImage: "folder.badge.gear") }
-                    Button("Copy URLs") { if repo.hasDisabledContentRecursive { pendingCopyRepo = repo; copyMode = .url; showCopyAlert = true } else { UIPasteboard.general.string = repo.allURLs(onlyEnabled: false) } }
-                    Button("Copy JSON") { if repo.hasDisabledContentRecursive { pendingCopyRepo = repo; copyMode = .json; showCopyAlert = true } else { if let s = viewModel.exportSingleRepoJSON(repo, onlyEnabled: false) { UIPasteboard.general.string = s } } }
-                    if !isReadOnly { Button(role: .destructive) { viewModel.deleteRepo(id: repo.id) } label: { Label(repo.isFolder ? "Delete Folder" : "Delete", systemImage: "trash") } }
                 }
-            }.onDelete { offsets in if isReadOnly { return }; offsets.forEach { index in if index < displayedRepos.count { viewModel.deleteRepo(id: displayedRepos[index].id) } } }
+                .onDelete(perform: deleteRepos)
+            }
         }
-        .navigationTitle("Repos")
-        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { HStack { if !isReadOnly { EditButton(); Button(action: { showAdd = true }) { Image(systemName: "plus") } } } } }
-        .sheet(isPresented: $showAdd) { AddRepoSheet(viewModel: viewModel, parentID: parentID) }
-        .sheet(isPresented: $showMoveSheet) { if let m = pendingMoveRepo { MoveRepoSheet(itemToMove: m, viewModel: viewModel) } }
-        .alert("Rename Folder", isPresented: $showRenameAlert) { TextField("New Name", text: $renameText); Button("Cancel", role: .cancel) { pendingRenameRepo = nil }; Button("Save") { if let r = pendingRenameRepo { viewModel.renameRepo(id: r.id, newName: renameText) }; pendingRenameRepo = nil } }
-        .confirmationDialog("Copy Options", isPresented: $showCopyAlert, titleVisibility: .visible) { Button("Copy All") { performCopy(all: true) }; Button("Only Enabled") { performCopy(all: false) }; Button("Cancel", role: .cancel) { pendingCopyRepo = nil } } message: { Text("This item contains disabled content.") }
+        .listStyle(.insetGrouped)
+        .navigationTitle(parentID == nil ? "Sources" : "Folder")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if !isReadOnly {
+                    HStack {
+                        EditButton()
+                        Button {
+                            showAdd = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                    }
+                }
+            }
+        }
+        .refreshable {
+            if let parentID,
+               let parent = viewModel.getRepo(parentID),
+               parent.isRemoteFolder {
+                await viewModel.fetchRemoteFolderList(folderID: parentID, fetchApps: true)
+            } else {
+                await viewModel.fetchAllRepos()
+            }
+        }
+        .sheet(isPresented: $showAdd) {
+            AddRepoSheet(viewModel: viewModel, parentID: parentID)
+        }
+        .sheet(isPresented: $showMoveSheet) {
+            if let repo = pendingMoveRepo {
+                MoveRepoSheet(itemToMove: repo, viewModel: viewModel)
+            }
+        }
+        .alert("Rename Folder", isPresented: $showRenameAlert) {
+            TextField("New Name", text: $renameText)
+            Button("Cancel", role: .cancel) {
+                pendingRenameRepo = nil
+            }
+            Button("Save") {
+                if let repo = pendingRenameRepo {
+                    viewModel.renameRepo(id: repo.id, newName: renameText)
+                }
+                pendingRenameRepo = nil
+            }
+        }
+        .confirmationDialog("Copy Options", isPresented: $showCopyAlert, titleVisibility: .visible) {
+            Button("Copy All") {
+                performCopy(all: true)
+            }
+            Button("Only Enabled") {
+                performCopy(all: false)
+            }
+            Button("Cancel", role: .cancel) {
+                pendingCopyRepo = nil
+            }
+        } message: {
+            Text("This item contains disabled content.")
+        }
     }
-    func performCopy(all: Bool) {
-        guard let repo = pendingCopyRepo else { return }; if copyMode == .json { if let s = viewModel.exportSingleRepoJSON(repo, onlyEnabled: !all) { UIPasteboard.general.string = s } } else { UIPasteboard.general.string = repo.allURLs(onlyEnabled: !all) }; pendingCopyRepo = nil
+    
+    @ViewBuilder
+    private func repositoryRow(_ repo: SavedRepo) -> some View {
+        HStack(spacing: 12) {
+            if repo.isFolder {
+                NavigationLink(destination: RepoManagementView(viewModel: viewModel, parentID: repo.id)) {
+                    repositoryIdentity(repo)
+                }
+            } else {
+                repositoryIdentity(repo)
+            }
+            
+            Spacer(minLength: 8)
+            
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { repo.isEnabled },
+                    set: { viewModel.setRepoEnabled(id: repo.id, enabled: $0) }
+                )
+            )
+            .labelsHidden()
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private func repositoryIdentity(_ repo: SavedRepo) -> some View {
+        HStack(spacing: 12) {
+            repositoryIcon(repo)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(repo.name)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(repo.isEnabled ? .primary : .secondary)
+                    .lineLimit(1)
+                
+                if repo.isFolder {
+                    Text("\(repo.totalRepoCount) sources • \(repo.totalAppCount) apps")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(repo.appCount) apps")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    if let url = repo.url {
+                        Text(url.host ?? url.absoluteString)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func repositoryIcon(_ repo: SavedRepo) -> some View {
+        if repo.isFolder {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(.secondarySystemBackground))
+                
+                Image(systemName: repo.isRemoteFolder ? "folder.badge.gearshape" : "folder.fill")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 42, height: 42)
+        } else {
+            switch repo.fetchStatus {
+            case .loading:
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(.secondarySystemBackground))
+                    ProgressView()
+                }
+                .frame(width: 42, height: 42)
+            case .waiting:
+                statusIcon("clock", foreground: .secondary)
+            case .error:
+                statusIcon("exclamationmark.triangle.fill", foreground: .red)
+            default:
+                CachedRemoteImage(
+                    url: URL(string: repo.iconURL ?? ""),
+                    contentMode: .fill,
+                    placeholderSystemImage: "server.rack"
+                )
+                .frame(width: 42, height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
+    
+    private func statusIcon(_ systemName: String, foreground: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(.secondarySystemBackground))
+            Image(systemName: systemName)
+                .foregroundStyle(foreground)
+        }
+        .frame(width: 42, height: 42)
+    }
+    
+    @ViewBuilder
+    private func repositoryContextMenu(_ repo: SavedRepo) -> some View {
+        if repo.isFolder {
+            if repo.isRemoteFolder {
+                Button {
+                    Task {
+                        await viewModel.fetchRemoteFolderList(folderID: repo.id, fetchApps: true)
+                    }
+                } label: {
+                    Label("Update List", systemImage: "arrow.triangle.2.circlepath")
+                }
+                
+                if let listURL = repo.repoListURL {
+                    Button {
+                        UIPasteboard.general.string = listURL.absoluteString
+                    } label: {
+                        Label("Copy Folder URL", systemImage: "link")
+                    }
+                }
+            }
+            
+            Button {
+                pendingRenameRepo = repo
+                renameText = repo.name
+                showRenameAlert = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+        }
+        
+        Button {
+            pendingMoveRepo = repo
+            showMoveSheet = true
+        } label: {
+            Label("Move…", systemImage: "folder.badge.gearshape")
+        }
+        
+        Button("Copy URLs") {
+            if repo.hasDisabledContentRecursive {
+                pendingCopyRepo = repo
+                copyMode = .url
+                showCopyAlert = true
+            } else {
+                UIPasteboard.general.string = repo.allURLs(onlyEnabled: false)
+            }
+        }
+        
+        Button("Copy JSON") {
+            if repo.hasDisabledContentRecursive {
+                pendingCopyRepo = repo
+                copyMode = .json
+                showCopyAlert = true
+            } else if let json = viewModel.exportSingleRepoJSON(repo, onlyEnabled: false) {
+                UIPasteboard.general.string = json
+            }
+        }
+        
+        if !isReadOnly {
+            Button(role: .destructive) {
+                viewModel.deleteRepo(id: repo.id)
+            } label: {
+                Label(repo.isFolder ? "Delete Folder" : "Delete", systemImage: "trash")
+            }
+        }
+    }
+    
+    private func deleteRepos(at offsets: IndexSet) {
+        guard !isReadOnly else { return }
+        
+        for index in offsets where displayedRepos.indices.contains(index) {
+            viewModel.deleteRepo(id: displayedRepos[index].id)
+        }
+    }
+    
+    private func performCopy(all: Bool) {
+        guard let repo = pendingCopyRepo else { return }
+        
+        if copyMode == .json {
+            if let json = viewModel.exportSingleRepoJSON(repo, onlyEnabled: !all) {
+                UIPasteboard.general.string = json
+            }
+        } else {
+            UIPasteboard.general.string = repo.allURLs(onlyEnabled: !all)
+        }
+        
+        pendingCopyRepo = nil
     }
 }
+
 struct MoveRepoSheet: View { let itemToMove: SavedRepo; @ObservedObject var viewModel: AppStoreViewModel; @Environment(\.dismiss) var dismiss; var body: some View { NavigationStack { List { Button { viewModel.moveRepo(id: itemToMove.id, toParentId: nil); dismiss() } label: { HStack { Image(systemName: "house.fill"); Text("Root") } }; Section("Folders") { ForEach(viewModel.getFolderTargets(excludingId: itemToMove.id)) { folder in Button { viewModel.moveRepo(id: itemToMove.id, toParentId: folder.id); dismiss() } label: { HStack { Image(systemName: "folder"); Text(folder.name) } } } } }.navigationTitle("Move to...").toolbar { Button("Cancel") { dismiss() } } } } }
 struct AddRepoSheet: View { @ObservedObject var viewModel: AppStoreViewModel; let parentID: String?; @Environment(\.dismiss) var dismiss; @State private var mode = 0; @State private var textInput = ""; @State private var folderName = ""; @State private var folderLink = ""; var body: some View { NavigationStack { Form { Picker("Add", selection: $mode) { Text("Sources").tag(0); Text("Folder").tag(1) }.pickerStyle(.segmented); if mode == 0 { Section(header: Text("URLs (One per line)")) { TextEditor(text: $textInput).frame(height: 150).autocorrectionDisabled().textInputAutocapitalization(.never); Button("Paste from Clipboard") { if let s = UIPasteboard.general.string { textInput = s } } } } else { Section(header: Text("New Folder")) { TextField("Name", text: $folderName); TextField("Link URL (Optional)", text: $folderLink).autocorrectionDisabled().textInputAutocapitalization(.never).keyboardType(.URL) }; Section(footer: Text("If a link is provided, this folder will automatically populate with repositories from that URL (one per line).")) { EmptyView() } } }.navigationTitle("Add").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { if mode == 0 { let lines = textInput.components(separatedBy: .newlines); for line in lines { let t = line.trimmingCharacters(in: .whitespacesAndNewlines); if !t.isEmpty { let fixed = (!t.lowercased().hasPrefix("http") ? "https://" + t : t); if let u = URL(string: fixed) { viewModel.addRepo(url: u, parentID: parentID) } } } } else { let link = folderLink.trimmingCharacters(in: .whitespacesAndNewlines); var finalName = folderName.trimmingCharacters(in: .whitespacesAndNewlines); if finalName.isEmpty && !link.isEmpty { finalName = link; if finalName.lowercased().hasPrefix("https://") { finalName = String(finalName.dropFirst(8)) } else if finalName.lowercased().hasPrefix("http://") { finalName = String(finalName.dropFirst(7)) } }; if !finalName.isEmpty { let url = link.isEmpty ? nil : URL(string: (!link.lowercased().hasPrefix("http") ? "https://" + link : link)); viewModel.addFolder(name: finalName, parentID: parentID, repoListURL: url) } }; dismiss() } } } } } }
 struct ImportJSONView: View { @ObservedObject var viewModel: AppStoreViewModel; @Environment(\.dismiss) var dismiss; @State private var text = ""; var body: some View { NavigationStack { Form { TextEditor(text: $text).frame(height: 300); Button("Paste") { if let s = UIPasteboard.general.string { text = s } } }.navigationTitle("Import JSON").toolbar { Button("Import") { viewModel.importReposJSON(text); dismiss() } } } } }

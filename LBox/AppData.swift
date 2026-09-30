@@ -315,6 +315,24 @@ actor Semaphore {
     func signal() { if !waiters.isEmpty { waiters.removeFirst().resume() } else { count += 1 } }
 }
 
+actor RepoPersistenceWriter {
+    private var latestRevision = 0
+    
+    func save(_ repos: [SavedRepo], to url: URL, revision: Int) {
+        guard revision >= latestRevision else { return }
+        latestRevision = revision
+        
+        do {
+            let data = try JSONEncoder().encode(repos)
+            let folder = url.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            print("Failed to save repos to file: \(error)")
+        }
+    }
+}
+
 @MainActor
 class AppStoreViewModel: ObservableObject {
     @Published var savedRepos: [SavedRepo] = []
@@ -359,6 +377,8 @@ class AppStoreViewModel: ObservableObject {
     
     @Published var isAutoUnzipEnabled: Bool = false { didSet { UserDefaults.standard.set(isAutoUnzipEnabled, forKey: "kAutoUnzipEnabled") } }
     private let kSavedReposKey = "kSavedReposKey"
+    private let persistenceWriter = RepoPersistenceWriter()
+    private var persistenceRevision = 0
     
     // MARK: - Persistence Path
     private var reposFileURL: URL {
@@ -758,19 +778,16 @@ class AppStoreViewModel: ObservableObject {
     
     func saveRepos() {
         sortRepos()
-        let snapshot = savedRepos
+        persistenceRevision += 1
         
-        // Use synchronous file write to ensure data persistence immediately.
-        // UserDefaults had size limits and async issues causing data loss.
-        do {
-            let data = try JSONEncoder().encode(snapshot)
-            // Ensure directory exists
-            let folder = reposFileURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            
-            try data.write(to: reposFileURL, options: .atomic)
-        } catch {
-            print("Failed to save repos to file: \(error)")
+        let revision = persistenceRevision
+        let snapshot = savedRepos
+        let destination = reposFileURL
+        
+        // Serialize persistence away from the main actor so large repo caches do not stall scrolling.
+        // Revisions prevent an older snapshot from overwriting a newer one if tasks are scheduled out of order.
+        Task(priority: .utility) {
+            await persistenceWriter.save(snapshot, to: destination, revision: revision)
         }
     }
     
@@ -819,7 +836,10 @@ class AppStoreViewModel: ObservableObject {
         updateRepoStatus(id: folderID, status: .loading)
         
         do {
-            let (data, _) = try await URLSession.shared.data(from: listURL)
+            var request = URLRequest(url: listURL)
+            request.cachePolicy = .useProtocolCachePolicy
+            request.timeoutInterval = 20
+            let (data, _) = try await URLSession.shared.data(for: request)
             guard let string = String(data: data, encoding: .utf8) else { throw URLError(.cannotDecodeContentData) }
             let lines = string.components(separatedBy: .newlines)
             
@@ -892,7 +912,8 @@ class AppStoreViewModel: ObservableObject {
         
         do {
             var request = URLRequest(url: url)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.cachePolicy = .useProtocolCachePolicy
+            request.timeoutInterval = 20
             let (data, _) = try await URLSession.shared.data(for: request)
             
             // Offload decoding to background thread
@@ -911,7 +932,9 @@ class AppStoreViewModel: ObservableObject {
             updateNode(updatedRepo)
         } catch {
             print("Failed to fetch \(url): \(error)")
-            var failed = repo; failed.isEnabled = false; failed.fetchStatus = .error(error.localizedDescription)
+            // Keep the source enabled and retain its cached apps after transient network failures.
+            var failed = repo
+            failed.fetchStatus = .error(error.localizedDescription)
             updateNode(failed)
         }
         
@@ -949,7 +972,10 @@ class AppStoreViewModel: ObservableObject {
         fetchProgress = 0
         
         for repo in leafRepos { updateRepoStatus(id: repo.id, status: .waiting) }
-        let semaphore = Semaphore(3)
+        // A modern iPhone can comfortably refresh several small JSON feeds in parallel.
+        // Keep an upper bound so large source lists do not overwhelm slower hosts.
+        let concurrentFetches = min(6, max(3, ProcessInfo.processInfo.activeProcessorCount))
+        let semaphore = Semaphore(concurrentFetches)
         await withTaskGroup(of: Void.self) { group in
             for repo in leafRepos {
                 group.addTask {
