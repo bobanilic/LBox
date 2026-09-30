@@ -6,238 +6,262 @@ struct AppDetailView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @State private var showSetupNeeded = false
     
-    // Helper to extract versions cleanly and avoid compiler confusion in ViewBuilder
     private var versionHistory: [AppItem] {
-        return viewModel.getVersions(for: app)
+        viewModel.getVersions(for: app)
     }
     
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                headerSection
-                Divider().padding(.horizontal)
+            LazyVStack(alignment: .leading, spacing: 28) {
+                heroSection
+                
                 if !app.screenshotURLs.isEmpty {
                     screenshotsSection
-                    Divider().padding(.horizontal)
                 }
+                
                 aboutSection
-                Divider().padding(.horizontal)
                 versionsSection
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 36)
             }
-            .padding(.top)
+            .padding(.top, 10)
         }
+        .background(Color(.systemBackground))
         .navigationBarTitleDisplayMode(.inline)
         .alert("Setup Required", isPresented: $showSetupNeeded) {
             Button("Open LiveContainer") {
-                if let url = URL(string: "livecontainer://livecontainer-launch?bundle-name=\(downloadManager.getInstalledAppName(bundleID: app.bundleIdentifier) ?? "Unknown")") { UIApplication.shared.open(url) }
+                let name = downloadManager.getInstalledAppName(bundleID: app.bundleIdentifier) ?? "Unknown"
+                if let url = URL(string: "livecontainer://livecontainer-launch?bundle-name=\(name)") {
+                    UIApplication.shared.open(url)
+                }
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This app has not been configured yet. Please open LiveContainer, then find and run this app once to generate the configuration.")
+            Text("This app has not been configured yet. Open it once in LiveContainer, then return to LBox.")
         }
     }
     
-    var headerSection: some View {
-        HStack(alignment: .top, spacing: 16) {
-            AsyncImage(url: URL(string: app.iconURL ?? "")) { phase in
-                if let image = phase.image {
-                    image.resizable()
-                } else if phase.error != nil {
-                    Color.gray
-                } else {
-                    Color.gray.opacity(0.3)
-                }
-            }
-            .frame(width: 100, height: 100)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .shadow(radius: 2)
-            
-            VStack(alignment: .leading, spacing: 6) {
-                Text(app.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                Text(app.bundleIdentifier)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                
-                HStack(spacing: 4) {
-                    Text("v\(app.version)")
-                    if let size = app.size {
-                        Text("•")
-                        Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
-                    }
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-                
-                if let repo = app.sourceRepoName {
-                     Text(repo)
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.blue.opacity(0.1))
-                        .foregroundColor(.blue)
-                        .cornerRadius(4)
-                }
-                
-                HStack(spacing: 12) {
-                    DownloadButton(app: app)
-                    
-                    if downloadManager.isAppInstalled(bundleID: app.bundleIdentifier) {
-                        Button {
-                            launchApp(bundleID: app.bundleIdentifier)
-                        } label: {
-                            Text("OPEN")
-                                .font(.headline.bold())
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 24)
-                                .padding(.vertical, 6)
-                                .background(Color.blue)
-                                .clipShape(Capsule())
+    private var heroSection: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 18) {
+                AsyncImage(url: URL(string: app.iconURL ?? "")) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        ZStack {
+                            Color(.secondarySystemBackground)
+                            Image(systemName: "app.fill")
+                                .font(.system(size: 42))
+                                .foregroundStyle(.tertiary)
                         }
                     }
                 }
-                .padding(.top, 4)
+                .frame(width: 116, height: 116)
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
+                }
+                
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(app.name)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    
+                    Text("Version \(app.version)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    if let repo = app.sourceRepoName, !repo.isEmpty {
+                        Text(repo)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    
+                    if let size = app.size {
+                        Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                
+                Spacer(minLength: 0)
             }
-            Spacer()
+            
+            HStack(spacing: 12) {
+                DownloadButton(app: app)
+                
+                if downloadManager.isAppInstalled(bundleID: app.bundleIdentifier) {
+                    Button {
+                        launchApp(bundleID: app.bundleIdentifier)
+                    } label: {
+                        Text("OPEN")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 24)
+                            .frame(height: 38)
+                            .background(Color.accentColor, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            Text(app.bundleIdentifier)
+                .font(.caption2.monospaced())
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 18)
     }
     
-    // ... [screenshotsSection, aboutSection, versionsSection unchanged] ...
-    var screenshotsSection: some View {
-        VStack(alignment: .leading) {
-            Text("Preview")
-                .font(.headline)
-                .padding(.horizontal)
+    private var screenshotsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Preview")
             
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                LazyHStack(spacing: 12) {
                     ForEach(app.screenshotURLs, id: \.self) { urlString in
                         AsyncImage(url: URL(string: urlString)) { phase in
-                            if let image = phase.image {
-                                image.resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            } else {
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.gray.opacity(0.1))
-                                    .frame(width: 200, height: 350)
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                            default:
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color(.secondarySystemBackground))
                             }
                         }
-                        .frame(height: 350)
-                        .cornerRadius(12)
+                        .frame(height: 360)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 18)
             }
         }
     }
     
-    var aboutSection: some View {
+    private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("About")
-                .font(.headline)
+            sectionTitle("About")
             Text(app.localizedDescription ?? "No description available.")
                 .font(.body)
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .padding(.horizontal, 18)
         }
-        .padding(.horizontal)
     }
     
-    var versionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Version History")
-                .font(.headline)
-                .padding(.horizontal)
+    private var versionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Version History")
             
-            ForEach(versionHistory) { versionApp in
-                VersionRow(app: versionApp)
+            VStack(spacing: 0) {
+                ForEach(Array(versionHistory.enumerated()), id: \.element.id) { index, versionApp in
+                    VersionRow(app: versionApp)
+                    
+                    if index < versionHistory.count - 1 {
+                        Divider()
+                            .padding(.leading, 18)
+                    }
+                }
             }
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.horizontal, 18)
         }
     }
     
-    // Launch Logic
-    func launchApp(bundleID: String) {
-        if let installedApp = downloadManager.installedApps.first(where: { $0.bundleID == bundleID }) {
-            if downloadManager.hasLCAppInfo(bundleID: bundleID) {
-                let folderName = installedApp.url.lastPathComponent
-                let urlString = "livecontainer://livecontainer-launch?bundle-name=\(folderName)"
-                if let url = URL(string: urlString) {
-                    UIApplication.shared.open(url)
-                }
-            } else {
-                showSetupNeeded = true
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.title3.weight(.bold))
+            .padding(.horizontal, 18)
+    }
+    
+    private func launchApp(bundleID: String) {
+        guard let installedApp = downloadManager.installedApps.first(where: { $0.bundleID == bundleID }) else {
+            return
+        }
+        
+        if downloadManager.hasLCAppInfo(bundleID: bundleID) {
+            let folderName = installedApp.url.lastPathComponent
+            if let url = URL(string: "livecontainer://livecontainer-launch?bundle-name=\(folderName)") {
+                UIApplication.shared.open(url)
             }
+        } else {
+            showSetupNeeded = true
         }
     }
 }
 
-// Separate row for versions (Unchanged)
 struct VersionRow: View {
     let app: AppItem
     @EnvironmentObject var downloadManager: DownloadManager
     
-    var isInstalledVersion: Bool {
-        guard let current = downloadManager.getInstalledVersion(bundleID: app.bundleIdentifier) else { return false }
+    private var isInstalledVersion: Bool {
+        guard let current = downloadManager.getInstalledVersion(bundleID: app.bundleIdentifier) else {
+            return false
+        }
         return current == app.version
     }
     
     var body: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading) {
-                HStack {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 7) {
                     Text("Version \(app.version)")
-                        .fontWeight(.semibold)
-                    
-                    if let repo = app.sourceRepoName {
-                        Text(repo)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 4)
-                            .background(Color.gray.opacity(0.1))
-                            .cornerRadius(4)
-                    }
+                        .font(.subheadline.weight(.semibold))
                     
                     if isInstalledVersion {
-                        Text("Current")
-                            .font(.caption2.bold())
-                            .foregroundColor(.green)
-                            .padding(.horizontal, 4)
-                            .background(Color.green.opacity(0.1))
-                            .cornerRadius(4)
+                        Text("CURRENT")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .frame(height: 20)
+                            .background(Color(.tertiarySystemFill), in: Capsule())
                     }
                 }
                 
-                HStack(spacing: 4) {
-                    Text(app.versionDate ?? "Unknown Date")
+                HStack(spacing: 5) {
+                    if let date = app.versionDate, !date.isEmpty {
+                        Text(date)
+                    }
                     
                     if let size = app.size {
-                        Text("•")
+                        if app.versionDate?.isEmpty == false {
+                            Text("•")
+                        }
                         Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+                    }
+                    
+                    if let repo = app.sourceRepoName, !repo.isEmpty {
+                        Text("•")
+                        Text(repo)
+                            .lineLimit(1)
                     }
                 }
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
             }
-            Spacer()
+            
+            Spacer(minLength: 8)
             DownloadButton(app: app, compact: true)
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
-        .padding(.horizontal)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
     }
 }
 
-// ... [FileShareSheet, DownloadButton Unchanged] ...
 struct FileShareSheet: UIViewControllerRepresentable {
     let activityItems: [Any]
+    
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
     }
+    
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
