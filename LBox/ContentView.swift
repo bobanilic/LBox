@@ -121,12 +121,17 @@ struct ContentView: View {
     // Removed conflictAlertBinding computed property in favor of local @State
     
     func performInitialSetup() async {
-        if viewModel.displayApps.isEmpty { await viewModel.fetchAllRepos() }
+        // Render the persisted catalogue first. Network refresh is intentionally non-blocking.
+        await viewModel.refreshDisplayApps()
+        
+        Task(priority: .utility) {
+            await viewModel.fetchAllRepos()
+        }
+        
         downloadManager.refreshFileList()
         downloadManager.refreshInstalledApps()
-        try? await Task.sleep(nanoseconds: 500_000_000)
         viewModel.checkForUpdates(installedApps: downloadManager.installedApps)
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        
         if !hasAskedForSetup && downloadManager.customLiveContainerFolder == nil {
             showSetupAlert = true
         }
@@ -161,42 +166,43 @@ struct ContentView: View {
 // MARK: - Store View
 struct StoreView: View {
     @ObservedObject var viewModel: AppStoreViewModel
+    
+    private let columns = [
+        GridItem(.flexible(), spacing: 16, alignment: .top),
+        GridItem(.flexible(), spacing: 16, alignment: .top)
+    ]
+    
     var body: some View {
         NavigationStack {
-            List {
-                if viewModel.isLoading && viewModel.fetchTotal > 0 {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Updating Repositories...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        ProgressView(value: Double(viewModel.fetchProgress), total: Double(viewModel.fetchTotal))
-                            .progressViewStyle(.linear)
-                        HStack {
-                            Spacer()
-                            Text("\(viewModel.fetchProgress)/\(viewModel.fetchTotal)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    storeControls
+                        .padding(.horizontal, 18)
+                        .padding(.top, 4)
+                        .padding(.bottom, 18)
+                    
+                    if viewModel.filteredApps.isEmpty && !viewModel.isLoading {
+                        ContentUnavailableView(
+                            "No Apps",
+                            systemImage: "square.grid.2x2",
+                            description: Text(viewModel.searchText.isEmpty ? "No apps are available from the enabled sources." : "No apps match your search.")
+                        )
+                        .padding(.top, 72)
+                    } else {
+                        LazyVGrid(columns: columns, alignment: .center, spacing: 22) {
+                            ForEach(viewModel.filteredApps) { app in
+                                NavigationLink(destination: AppDetailView(app: app, viewModel: viewModel)) {
+                                    StoreAppTile(app: app)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                }
-                
-                if !viewModel.savedRepos.isEmpty {
-                    Picker("Source", selection: $viewModel.selectedRepoID) {
-                        Text("All Sources").tag(String?.none)
-                        ForEach(viewModel.getEnabledLeafRepos()) { repo in
-                            Text(repo.name).tag(repo.name as String?)
-                        }
-                    }
-                    .pickerStyle(.menu).listRowBackground(Color.clear).padding(.bottom, 5)
-                }
-                ForEach(viewModel.filteredApps) { app in
-                    NavigationLink(destination: AppDetailView(app: app, viewModel: viewModel)) {
-                        AppListRow(app: app)
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 28)
                     }
                 }
             }
+            .background(Color(.systemBackground))
             .navigationTitle("Store")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -215,42 +221,157 @@ struct StoreView: View {
             .refreshable { await viewModel.fetchAllRepos() }
         }
     }
+    
+    private var storeControls: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Menu {
+                    Button("All Sources") {
+                        viewModel.selectedRepoID = nil
+                    }
+                    
+                    Divider()
+                    
+                    ForEach(viewModel.getEnabledLeafRepos()) { repo in
+                        Button {
+                            viewModel.selectedRepoID = repo.name
+                        } label: {
+                            if viewModel.selectedRepoID == repo.name {
+                                Label(repo.name, systemImage: "checkmark")
+                            } else {
+                                Text(repo.name)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text(viewModel.selectedRepoID ?? "All Sources")
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(Color(.secondarySystemBackground), in: Capsule())
+                }
+                
+                Spacer(minLength: 8)
+                
+                Text("\(viewModel.filteredApps.count) apps")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            if viewModel.isLoading && viewModel.fetchTotal > 0 {
+                VStack(spacing: 5) {
+                    ProgressView(
+                        value: Double(viewModel.fetchProgress),
+                        total: Double(max(viewModel.fetchTotal, 1))
+                    )
+                    .progressViewStyle(.linear)
+                    
+                    HStack {
+                        Text("Refreshing sources")
+                        Spacer()
+                        Text("\(viewModel.fetchProgress)/\(viewModel.fetchTotal)")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+                .transition(.opacity)
+            }
+        }
+    }
 }
 
-struct AppListRow: View {
+private struct StoreAppTile: View {
     let app: AppItem
-    @EnvironmentObject var downloadManager: DownloadManager
-    @EnvironmentObject var viewModel: AppStoreViewModel
-    var updateAvailable: Bool {
-        guard let installedVer = downloadManager.getInstalledVersion(bundleID: app.bundleIdentifier) else { return false }
-        return app.version.compare(installedVer, options: .numeric) == .orderedDescending
+    
+    @EnvironmentObject private var downloadManager: DownloadManager
+    
+    private var updateAvailable: Bool {
+        guard let installed = downloadManager.getInstalledVersion(bundleID: app.bundleIdentifier) else {
+            return false
+        }
+        return app.version.compare(installed, options: .numeric) == .orderedDescending
     }
+    
+    private var installed: Bool {
+        downloadManager.isAppInstalled(bundleID: app.bundleIdentifier)
+    }
+    
     var body: some View {
-        HStack(spacing: 16) {
-            AsyncImage(url: URL(string: app.iconURL ?? "")) { phase in
-                if let image = phase.image { image.resizable() } else { Color.gray.opacity(0.2) }
-            }.aspectRatio(contentMode: .fill).frame(width: 60, height: 60).clipShape(RoundedRectangle(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(app.name).font(.headline).lineLimit(1)
-                    if updateAvailable {
-                        Text("UPDATE").font(.system(size: 9, weight: .bold))
-                            .padding(4)
-                            .background(Color.blue.opacity(0.2))
-                            .foregroundColor(.blue)
-                            .clipShape(Capsule())
-                    } else if downloadManager.isAppInstalled(bundleID: app.bundleIdentifier) {
-                        Text("INSTALLED").font(.system(size: 9, weight: .bold))
-                            .padding(4)
-                            .background(Color.gray.opacity(0.2))
-                            .clipShape(Capsule())
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack(alignment: .topTrailing) {
+                AsyncImage(url: URL(string: app.iconURL ?? "")) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        ZStack {
+                            Color(.secondarySystemBackground)
+                            Image(systemName: "app.fill")
+                                .font(.system(size: 38, weight: .regular))
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
-                if let r = app.sourceRepoName { Text("via " + r).font(.caption2).foregroundColor(.blue) }
-                if let d = app.localizedDescription { Text(d).font(.caption).foregroundColor(.secondary).lineLimit(2) }
+                .aspectRatio(1, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
+                }
+                
+                if updateAvailable {
+                    statusBadge("UPDATE")
+                } else if installed {
+                    statusBadge("INSTALLED")
+                }
             }
-            Spacer()
-        }.padding(.vertical, 4)
+            
+            Text(app.name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            
+            HStack(spacing: 4) {
+                Text("v\(app.version)")
+                if let repo = app.sourceRepoName, !repo.isEmpty {
+                    Text("•")
+                    Text(repo)
+                        .lineLimit(1)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            
+            if let description = app.localizedDescription, !description.isEmpty {
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(app.name), version \(app.version)")
+    }
+    
+    private func statusBadge(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(8)
     }
 }
 
