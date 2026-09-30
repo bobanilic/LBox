@@ -145,8 +145,8 @@ struct AppDetailView: View {
             sectionTitle("Version History")
             
             VStack(spacing: 0) {
-                ForEach(Array(versionHistory.enumerated()), id: \.element.id) { index, versionApp in
-                    VersionRow(app: versionApp)
+                ForEach(versionHistory.indices, id: \.self) { index in
+                    VersionRow(app: versionHistory[index])
                     
                     if index < versionHistory.count - 1 {
                         Divider()
@@ -192,6 +192,22 @@ struct VersionRow: View {
         return current == app.version
     }
     
+    private var metadataText: String {
+        var parts: [String] = []
+        
+        if let date = app.versionDate, !date.isEmpty {
+            parts.append(date)
+        }
+        if let size = app.size {
+            parts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+        }
+        if let repo = app.sourceRepoName, !repo.isEmpty {
+            parts.append(repo)
+        }
+        
+        return parts.joined(separator: " • ")
+    }
+    
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 5) {
@@ -209,26 +225,10 @@ struct VersionRow: View {
                     }
                 }
                 
-                HStack(spacing: 5) {
-                    if let date = app.versionDate, !date.isEmpty {
-                        Text(date)
-                    }
-                    
-                    if let size = app.size {
-                        if app.versionDate?.isEmpty == false {
-                            Text("•")
-                        }
-                        Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
-                    }
-                    
-                    if let repo = app.sourceRepoName, !repo.isEmpty {
-                        Text("•")
-                        Text(repo)
-                            .lineLimit(1)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(metadataText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             
             Spacer(minLength: 8)
