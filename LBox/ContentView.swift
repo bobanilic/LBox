@@ -306,21 +306,11 @@ private struct StoreAppTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack(alignment: .topTrailing) {
-                AsyncImage(url: URL(string: app.iconURL ?? "")) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        ZStack {
-                            Color(.secondarySystemBackground)
-                            Image(systemName: "app.fill")
-                                .font(.system(size: 38, weight: .regular))
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
+                CachedRemoteImage(
+                    url: URL(string: app.iconURL ?? ""),
+                    contentMode: .fill,
+                    placeholderSystemImage: "app.fill"
+                )
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay {
