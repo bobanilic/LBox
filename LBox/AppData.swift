@@ -316,7 +316,12 @@ actor Semaphore {
 }
 
 actor RepoPersistenceWriter {
-    func save(_ repos: [SavedRepo], to url: URL) {
+    private var latestRevision = 0
+    
+    func save(_ repos: [SavedRepo], to url: URL, revision: Int) {
+        guard revision >= latestRevision else { return }
+        latestRevision = revision
+        
         do {
             let data = try JSONEncoder().encode(repos)
             let folder = url.deletingLastPathComponent()
@@ -373,6 +378,7 @@ class AppStoreViewModel: ObservableObject {
     @Published var isAutoUnzipEnabled: Bool = false { didSet { UserDefaults.standard.set(isAutoUnzipEnabled, forKey: "kAutoUnzipEnabled") } }
     private let kSavedReposKey = "kSavedReposKey"
     private let persistenceWriter = RepoPersistenceWriter()
+    private var persistenceRevision = 0
     
     // MARK: - Persistence Path
     private var reposFileURL: URL {
@@ -772,12 +778,16 @@ class AppStoreViewModel: ObservableObject {
     
     func saveRepos() {
         sortRepos()
+        persistenceRevision += 1
+        
+        let revision = persistenceRevision
         let snapshot = savedRepos
         let destination = reposFileURL
         
         // Serialize persistence away from the main actor so large repo caches do not stall scrolling.
+        // Revisions prevent an older snapshot from overwriting a newer one if tasks are scheduled out of order.
         Task(priority: .utility) {
-            await persistenceWriter.save(snapshot, to: destination)
+            await persistenceWriter.save(snapshot, to: destination, revision: revision)
         }
     }
     
