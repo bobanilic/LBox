@@ -750,7 +750,7 @@ struct SettingsView: View {
                     Button("Import Repos (JSON)") { showImporter = true }
                 }
                 Section("About") {
-                    Text("LBox v1.3.1 Preview")
+                    Text("LBox v1.3.2 Preview")
                     #if DEBUG
                     NavigationLink("Debug Logs") { DebugLogView() }
                     #endif
