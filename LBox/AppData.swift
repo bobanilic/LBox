@@ -167,8 +167,8 @@ private struct AltStoreVersionRecord: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decode(String.self, forKey: .version)
-        date = try container.decodeIfPresent(String.self, forKey: .date)
-            ?? container.decodeIfPresent(String.self, forKey: .versionDate)
+        date = (try container.decodeIfPresent(String.self, forKey: .date))
+            ?? (try container.decodeIfPresent(String.self, forKey: .versionDate))
         size = try container.decodeIfPresent(Int64.self, forKey: .size)
         downloadURL = try container.decode(String.self, forKey: .downloadURL)
     }
@@ -194,15 +194,15 @@ private struct AltStoreAppRecord: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
-        bundleIdentifier = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier)
-            ?? container.decodeIfPresent(String.self, forKey: .bundleID)
+        bundleIdentifier = (try container.decodeIfPresent(String.self, forKey: .bundleIdentifier))
+            ?? (try container.decodeIfPresent(String.self, forKey: .bundleID))
             ?? "unknown.bundle.id"
-        iconURL = try container.decodeIfPresent(String.self, forKey: .iconURL)
-            ?? container.decodeIfPresent(String.self, forKey: .icon)
+        iconURL = (try container.decodeIfPresent(String.self, forKey: .iconURL))
+            ?? (try container.decodeIfPresent(String.self, forKey: .icon))
         localizedDescription = try container.decodeIfPresent(String.self, forKey: .localizedDescription)
         subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
-        screenshotURLs = try container.decodeIfPresent([String].self, forKey: .screenshotURLs)
-            ?? container.decodeIfPresent([String].self, forKey: .screenshots)
+        screenshotURLs = (try container.decodeIfPresent([String].self, forKey: .screenshotURLs))
+            ?? (try container.decodeIfPresent([String].self, forKey: .screenshots))
             ?? []
         versions = try container.decodeIfPresent([AltStoreVersionRecord].self, forKey: .versions) ?? []
     }
