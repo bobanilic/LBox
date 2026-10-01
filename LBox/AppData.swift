@@ -167,8 +167,13 @@ private struct AltStoreVersionRecord: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decode(String.self, forKey: .version)
-        date = (try container.decodeIfPresent(String.self, forKey: .date))
-            ?? (try container.decodeIfPresent(String.self, forKey: .versionDate))
+        
+        if let primaryDate = try container.decodeIfPresent(String.self, forKey: .date) {
+            date = primaryDate
+        } else {
+            date = try container.decodeIfPresent(String.self, forKey: .versionDate)
+        }
+        
         size = try container.decodeIfPresent(Int64.self, forKey: .size)
         downloadURL = try container.decode(String.self, forKey: .downloadURL)
     }
@@ -194,19 +199,32 @@ private struct AltStoreAppRecord: Decodable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
-        bundleIdentifier = (try container.decodeIfPresent(String.self, forKey: .bundleIdentifier))
-            ?? (try container.decodeIfPresent(String.self, forKey: .bundleID))
-            ?? "unknown.bundle.id"
-        iconURL = (try container.decodeIfPresent(String.self, forKey: .iconURL))
-            ?? (try container.decodeIfPresent(String.self, forKey: .icon))
+        
+        if let primaryBundleID = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier) {
+            bundleIdentifier = primaryBundleID
+        } else if let alternateBundleID = try container.decodeIfPresent(String.self, forKey: .bundleID) {
+            bundleIdentifier = alternateBundleID
+        } else {
+            bundleIdentifier = "unknown.bundle.id"
+        }
+        
+        if let primaryIcon = try container.decodeIfPresent(String.self, forKey: .iconURL) {
+            iconURL = primaryIcon
+        } else {
+            iconURL = try container.decodeIfPresent(String.self, forKey: .icon)
+        }
+        
         localizedDescription = try container.decodeIfPresent(String.self, forKey: .localizedDescription)
         subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
-        screenshotURLs = (try container.decodeIfPresent([String].self, forKey: .screenshotURLs))
-            ?? (try container.decodeIfPresent([String].self, forKey: .screenshots))
-            ?? []
+        
+        if let primaryScreenshots = try container.decodeIfPresent([String].self, forKey: .screenshotURLs) {
+            screenshotURLs = primaryScreenshots
+        } else {
+            screenshotURLs = try container.decodeIfPresent([String].self, forKey: .screenshots) ?? []
+        }
+        
         versions = try container.decodeIfPresent([AltStoreVersionRecord].self, forKey: .versions) ?? []
-    }
-}
+    }}
 
 struct RepoResponse: Decodable, Sendable {
     let name: String
