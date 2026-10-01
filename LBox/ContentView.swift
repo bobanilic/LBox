@@ -113,6 +113,8 @@ struct ContentView: View {
                 .tabItem { Label("Settings", systemImage: "gear") }
                 .tag(3)
         }
+        .toolbarBackground(Color(.systemBackground), for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
     }
     
     var updateAlertBinding: Binding<Bool> {
@@ -168,8 +170,7 @@ struct StoreView: View {
     @ObservedObject var viewModel: AppStoreViewModel
     
     private let columns = [
-        GridItem(.flexible(), spacing: 16, alignment: .top),
-        GridItem(.flexible(), spacing: 16, alignment: .top)
+        GridItem(.adaptive(minimum: 112, maximum: 140), spacing: 14, alignment: .top)
     ]
     
     var body: some View {
@@ -204,19 +205,6 @@ struct StoreView: View {
             }
             .background(Color(.systemBackground))
             .navigationTitle("Store")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Picker("Sort By", selection: $viewModel.appSortOrder) {
-                            ForEach(AppSortOption.allCases) { option in
-                                Text(option.rawValue).tag(option)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                    }
-                }
-            }
             .searchable(text: $viewModel.searchText, prompt: "Search apps, bundles...")
             .refreshable { await viewModel.fetchAllRepos() }
         }
@@ -224,7 +212,7 @@ struct StoreView: View {
     
     private var storeControls: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Menu {
                     Button("All Sources") {
                         viewModel.selectedRepoID = nil
@@ -244,8 +232,8 @@ struct StoreView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease")
                         Text(viewModel.selectedRepoID ?? "All Sources")
                             .lineLimit(1)
                         Image(systemName: "chevron.down")
@@ -253,15 +241,36 @@ struct StoreView: View {
                     }
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .padding(.horizontal, 12)
-                    .frame(height: 36)
+                    .padding(.horizontal, 11)
+                    .frame(height: 34)
                     .background(Color(.secondarySystemBackground), in: Capsule())
                 }
+                .buttonStyle(.plain)
+                .layoutPriority(1)
                 
-                Spacer(minLength: 8)
+                Menu {
+                    Picker("Sort By", selection: $viewModel.appSortOrder) {
+                        Label("Name", systemImage: "textformat").tag(AppSortOption.name)
+                        Label("Newest", systemImage: "calendar").tag(AppSortOption.date)
+                        Label("Largest", systemImage: "internaldrive").tag(AppSortOption.size)
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.up.arrow.down")
+                        Text(sortLabel)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(Color(.secondarySystemBackground), in: Capsule())
+                }
+                .buttonStyle(.plain)
                 
-                Text("\(viewModel.filteredApps.count) apps")
-                    .font(.subheadline)
+                Spacer(minLength: 2)
+                
+                Text("\(viewModel.filteredApps.count)")
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
             
@@ -285,6 +294,15 @@ struct StoreView: View {
             }
         }
     }
+    
+    private var sortLabel: String {
+        switch viewModel.appSortOrder {
+        case .name: return "Name"
+        case .date: return "Newest"
+        case .size: return "Largest"
+        }
+    }
+
 }
 
 private struct StoreAppTile: View {
@@ -304,7 +322,7 @@ private struct StoreAppTile: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 7) {
             ZStack(alignment: .topTrailing) {
                 CachedRemoteImage(
                     url: URL(string: app.iconURL ?? ""),
@@ -312,9 +330,9 @@ private struct StoreAppTile: View {
                     placeholderSystemImage: "app.fill"
                 )
                 .aspectRatio(1, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
                 }
                 
@@ -326,9 +344,10 @@ private struct StoreAppTile: View {
             }
             
             Text(app.name)
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .frame(minHeight: 30, alignment: .topLeading)
             
             HStack(spacing: 4) {
                 Text("v\(app.version)")
@@ -338,16 +357,8 @@ private struct StoreAppTile: View {
                         .lineLimit(1)
                 }
             }
-            .font(.caption)
+            .font(.caption2)
             .foregroundStyle(.secondary)
-            
-            if let description = app.localizedDescription, !description.isEmpty {
-                Text(description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-            }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -356,10 +367,10 @@ private struct StoreAppTile: View {
     
     private func statusBadge(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .font(.system(size: 8, weight: .bold, design: .rounded))
             .foregroundStyle(.primary)
-            .padding(.horizontal, 8)
-            .frame(height: 24)
+            .padding(.horizontal, 7)
+            .frame(height: 21)
             .background(.ultraThinMaterial, in: Capsule())
             .padding(8)
     }
@@ -391,8 +402,9 @@ struct InstalledAppsView: View {
                     Button {
                         viewModel.checkForUpdates(installedApps: downloadManager.installedApps)
                     } label: {
-                        Text("Check Updates")
+                        Image(systemName: "arrow.clockwise")
                     }
+                    .accessibilityLabel("Check Updates")
                 }
             }
             .refreshable { downloadManager.refreshInstalledApps() }
