@@ -224,7 +224,8 @@ private struct AltStoreAppRecord: Decodable, Sendable {
         }
         
         versions = try container.decodeIfPresent([AltStoreVersionRecord].self, forKey: .versions) ?? []
-    }}
+    }
+}
 
 struct RepoResponse: Decodable, Sendable {
     let name: String
