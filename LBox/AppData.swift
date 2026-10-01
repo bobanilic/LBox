@@ -64,6 +64,30 @@ struct AppItem: Codable, Identifiable, Hashable, Sendable {
         case sourceRepoName
     }
     
+    init(
+        name: String,
+        bundleIdentifier: String,
+        version: String,
+        versionDate: String?,
+        size: Int64?,
+        downloadURL: String,
+        iconURL: String?,
+        localizedDescription: String?,
+        screenshotURLs: [String],
+        sourceRepoName: String? = nil
+    ) {
+        self.name = name
+        self.bundleIdentifier = bundleIdentifier
+        self.version = version
+        self.versionDate = versionDate
+        self.size = size
+        self.downloadURL = downloadURL
+        self.iconURL = iconURL
+        self.localizedDescription = localizedDescription
+        self.screenshotURLs = screenshotURLs
+        self.sourceRepoName = sourceRepoName
+    }
+    
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
@@ -130,15 +154,107 @@ struct MetaData: Codable, Sendable {
     let repoIcon: String?
 }
 
-struct RepoResponse: Codable, Sendable {
+private struct AltStoreVersionRecord: Decodable, Sendable {
+    let version: String
+    let date: String?
+    let size: Int64?
+    let downloadURL: String
+    
+    enum CodingKeys: String, CodingKey {
+        case version, date, versionDate, size, downloadURL
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(String.self, forKey: .version)
+        date = try container.decodeIfPresent(String.self, forKey: .date)
+            ?? container.decodeIfPresent(String.self, forKey: .versionDate)
+        size = try container.decodeIfPresent(Int64.self, forKey: .size)
+        downloadURL = try container.decode(String.self, forKey: .downloadURL)
+    }
+}
+
+private struct AltStoreAppRecord: Decodable, Sendable {
+    let name: String
+    let bundleIdentifier: String
+    let iconURL: String?
+    let localizedDescription: String?
+    let subtitle: String?
+    let screenshotURLs: [String]
+    let versions: [AltStoreVersionRecord]
+    
+    enum CodingKeys: String, CodingKey {
+        case name, bundleIdentifier, bundleID
+        case iconURL, icon
+        case localizedDescription, subtitle
+        case screenshotURLs, screenshots
+        case versions
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        bundleIdentifier = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier)
+            ?? container.decodeIfPresent(String.self, forKey: .bundleID)
+            ?? "unknown.bundle.id"
+        iconURL = try container.decodeIfPresent(String.self, forKey: .iconURL)
+            ?? container.decodeIfPresent(String.self, forKey: .icon)
+        localizedDescription = try container.decodeIfPresent(String.self, forKey: .localizedDescription)
+        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        screenshotURLs = try container.decodeIfPresent([String].self, forKey: .screenshotURLs)
+            ?? container.decodeIfPresent([String].self, forKey: .screenshots)
+            ?? []
+        versions = try container.decodeIfPresent([AltStoreVersionRecord].self, forKey: .versions) ?? []
+    }
+}
+
+struct RepoResponse: Decodable, Sendable {
     let name: String
     let identifier: String?
     let iconURL: String?
     let META: MetaData?
     let apps: [AppItem]
     
+    enum CodingKeys: String, CodingKey {
+        case name, identifier, iconURL, META, apps
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown Source"
+        identifier = try container.decodeIfPresent(String.self, forKey: .identifier)
+        iconURL = try container.decodeIfPresent(String.self, forKey: .iconURL)
+        META = try container.decodeIfPresent(MetaData.self, forKey: .META)
+        
+        // Existing LBox / legacy feeds expose one version directly on each app.
+        if let flatApps = try? container.decode([AppItem].self, forKey: .apps) {
+            apps = flatApps
+            return
+        }
+        
+        // Modern AltStore feeds (including AltGallery) keep all releases in versions[].
+        // Flatten them into LBox's existing AppItem representation so grouping,
+        // version history and sorting continue to work without a parallel code path.
+        let modernApps = try container.decode([AltStoreAppRecord].self, forKey: .apps)
+        apps = modernApps.flatMap { app in
+            app.versions.map { release in
+                AppItem(
+                    name: app.name,
+                    bundleIdentifier: app.bundleIdentifier,
+                    version: release.version,
+                    versionDate: release.date,
+                    size: release.size,
+                    downloadURL: release.downloadURL,
+                    iconURL: app.iconURL,
+                    localizedDescription: app.localizedDescription ?? app.subtitle,
+                    screenshotURLs: app.screenshotURLs
+                )
+            }
+        }
+    }
+    
     var bestIconURL: String? {
-        return iconURL ?? META?.repoIcon
+        iconURL ?? META?.repoIcon
     }
 }
 
