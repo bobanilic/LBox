@@ -151,7 +151,7 @@ struct EnhancedContentView: View {
                 .tabItem { Label("Store", systemImage: "bag") }
                 .tag(0)
 
-            InstalledAppsView(selectedTab: $selectedTab, viewModel: viewModel)
+            EnhancedInstalledAppsView(selectedTab: $selectedTab, viewModel: viewModel)
                 .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
                 .tag(1)
 
