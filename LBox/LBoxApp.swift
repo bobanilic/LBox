@@ -14,7 +14,7 @@ struct LBoxApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            EnhancedContentView()
         }
     }
 }
@@ -35,4 +35,3 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         completionHandler([.banner, .sound, .list])
     }
 }
-
