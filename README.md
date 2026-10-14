@@ -70,6 +70,14 @@ Downloads separates active transfers from failures and keeps pause/resume/retry/
 
 All existing preference/bookmark keys and repository caches are unchanged. Existing Settings controls remain: both storage directories and their Default actions, Auto .ipa to .app, Strict Grouping, repository sorting, Manage Sources, every repository export mode, JSON import, reset, and debug logs in debug builds. Appearance, catalog layout, and app sorting are now also accessible in Settings.
 
+### History and guest launch correction (1.4.1)
+
+Hybrid feeds now retain both their legacy current-version record and all published `versions[]` entries. Search presents the newest listing for each app/source; app details show available versions across enabled sources, regardless of catalog grouping. A one-time source refresh rebuilds caches that older parsers reduced to a single version. History can only include versions and download URLs actually published by the sources.
+
+The Browse spotlight selects Delta, or LiveContainer if Delta is unavailable, from the enabled catalog and stays independent of name/date/size sorting. It is hidden when searching or filtering a specific source.
+
+Updates carry over verified container/settings metadata from the recovery backup before replacing a bundle. Old patch/signing caches are removed and the new executable is marked for LiveContainer preparation. Recovery finalization preserves fresh signing state. The corresponding LiveContainer Siri Router update detects this preparation state (and missing metadata), hands off to its UI, patches/signs through the existing workflow, and continues to the queued app. The target container and any media/deep-link payload are retained. Install the matching LiveContainer launch fix before using this update workflow.
+
 ### Quick checks
 
 On macOS with Xcode installed, run `bash tests/run-quick-checks.sh`. These offline checks exercise production decoding, download state transitions, HTTP validation, file identity, and injected update/rollback failures. They also run before the existing GitHub IPA build.

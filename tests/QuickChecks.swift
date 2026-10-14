@@ -43,6 +43,18 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
         let repo = try JSONDecoder().decode(RepoResponse.self, from: Data(mixed.utf8))
         try expect(repo.apps.count == 3, "Mixed feeds must keep legacy entries and modern history")
         try expect(Set(repo.apps.map { $0.id }).count == 3, "Versions sharing an endpoint need distinct UI identities")
+        let hybrid = #"{"apps":[{"name":"Delta","bundleIdentifier":"test.delta","version":"2.0","downloadURL":"https://one.test/v2.ipa","versions":[{"version":"2.0","downloadURL":"https://one.test/v2.ipa"},{"version":"1.0","downloadURL":"https://one.test/v1.ipa"}]}]}"#
+        let hybridFeed = try JSONDecoder().decode(RepoResponse.self, from: Data(hybrid.utf8))
+        try expect(hybridFeed.apps.count == 2, "A legacy current-version field must not hide versions[] history or duplicate the current release")
+        var releases = hybridFeed.apps.map { value in var copy = value; copy.sourceRepoName = "First"; return copy }
+        var otherSource = releases[0]
+        otherSource.sourceRepoName = "Second"
+        releases.append(otherSource)
+        try expect(CatalogSelection.latestPerSource(releases).count == 2, "Search keeps the latest release from each source")
+        try expect(CatalogSelection.latestPerSource(releases).allSatisfy { $0.version == "2.0" }, "Old releases belong in details, not duplicate search listings")
+        try expect(CatalogSelection.history(for: releases[0], in: releases).count == 3, "Details expose older releases and alternative sources")
+        try expect(CatalogSelection.spotlight(in: releases) == CatalogSelection.spotlight(in: Array(releases.reversed())), "Spotlight must not follow catalog sorting")
+        try expect(CatalogSelection.spotlight(in: repo.apps) == nil, "Do not invent spotlight entries absent from enabled sources")
         let restored = try JSONDecoder().decode([AppItem].self, from: JSONEncoder().encode(repo.apps))
         try expect(restored == repo.apps, "Cached app metadata must round-trip")
 
@@ -92,6 +104,23 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
         }
         try writePlist(["LCContainers": [["folderName": "retained"], ["folderName": "shared"]], "setting": "old"], to: oldInfo)
         try writePlist(["LCContainers": [["folderName": "temporary"], ["folderName": "shared"]]], to: newInfo)
+        let preparedInfo = root.appendingPathComponent("prepared.plist")
+        var originalInfo = try PropertyListSerialization.propertyList(from: Data(contentsOf: oldInfo), format: nil) as! [String: Any]
+        originalInfo["LCDataUUID"] = "retained"
+        originalInfo["LCPatchRevision"] = 7
+        originalInfo["LCJITLessSignID"] = "stale-signature"
+        try writePlist(originalInfo, to: oldInfo)
+        do {
+            try UpdateRecovery.prepareMetadata(oldInfo: oldInfo, preparedInfo: preparedInfo) { _, _ in throw CheckError.injectedWriteFailure }
+            throw CheckError.failed("Failed metadata carryover must stop replacement")
+        } catch CheckError.injectedWriteFailure {}
+        try expect(!manager.fileExists(atPath: preparedInfo.path), "A failed preparation must leave the existing bundle untouched")
+        try UpdateRecovery.prepareMetadata(oldInfo: oldInfo, preparedInfo: preparedInfo)
+        let prepared = try PropertyListSerialization.propertyList(from: Data(contentsOf: preparedInfo), format: nil) as! [String: Any]
+        try expect(prepared["LCDataUUID"] as? String == "retained", "An updated app must use its existing data on the first launch")
+        try expect(prepared["LBoxNeedsPreparation"] as? Bool == true && prepared["LCPatchRevision"] as? Int == -1, "Copied settings must not make an unpatched binary appear ready")
+        try expect(prepared["LCJITLessSignID"] == nil, "Old signing state must not carry over to a new executable")
+        try writePlist(["LCContainers": [["folderName": "temporary"], ["folderName": "shared"]], "LCPatchRevision": 8, "LCJITLessSignID": "new-signature"], to: newInfo)
         let originalNewData = try Data(contentsOf: newInfo)
         do {
             try UpdateRecovery.patchMetadata(oldInfo: oldInfo, newInfo: newInfo, dataRoot: dataRoot) { _, _ in
@@ -104,6 +133,8 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
         try expect(manager.fileExists(atPath: oldInfo.path), "Failed write must retain recovery metadata")
         try expect(manager.fileExists(atPath: dataRoot.appendingPathComponent("temporary").path), "Cleanup must wait for verified metadata")
         try UpdateRecovery.patchMetadata(oldInfo: oldInfo, newInfo: newInfo, dataRoot: dataRoot)
+        let finalized = try PropertyListSerialization.propertyList(from: Data(contentsOf: newInfo), format: nil) as! [String: Any]
+        try expect(finalized["LCPatchRevision"] as? Int == 8 && finalized["LCJITLessSignID"] as? String == "new-signature", "Finalizing recovery must preserve LiveContainer's freshly generated signing state")
         try expect(manager.fileExists(atPath: dataRoot.appendingPathComponent("shared").path), "Containers referenced by the old app must survive")
         try expect(manager.fileExists(atPath: dataRoot.appendingPathComponent("retained").path), "Existing user data must survive")
         try expect(!manager.fileExists(atPath: dataRoot.appendingPathComponent("temporary").path), "Unused temporary container should be cleaned")

@@ -82,6 +82,7 @@ class AppStoreViewModel: ObservableObject {
     private let persistenceWriter = RepoPersistenceWriter()
     private var persistenceRevision = 0
     private var displayGeneration = 0
+    private var historyRefreshedSources = Set(UserDefaults.standard.stringArray(forKey: "kFullHistorySourcesV1") ?? [])
     @Published private(set) var catalogRevision = 0
     
     // MARK: - Persistence Path
@@ -616,9 +617,10 @@ class AppStoreViewModel: ObservableObject {
         updateRepoStatus(id: id, status: .loading)
         
         do {
-            var payload = try await RepositoryTransport.load(url)
+            let needsHistoryRefresh = !historyRefreshedSources.contains(id)
+            var payload = try await RepositoryTransport.load(url, bypassCache: needsHistoryRefresh)
             if case .notModified = payload {
-                if repo.cachedApps != nil {
+                if repo.cachedApps != nil && !needsHistoryRefresh {
                     updateRepoStatus(id: id, status: .success)
                     if saveAfter { saveRepos() }
                     return
@@ -641,6 +643,8 @@ class AppStoreViewModel: ObservableObject {
             updatedRepo.fetchStatus = decoded.skippedRecords == 0 ? .success : .warning("Loaded usable apps; skipped \(decoded.skippedRecords) invalid entries.")
             updatedRepo.cachedApps = apps
             updateNode(updatedRepo)
+            historyRefreshedSources.insert(id)
+            UserDefaults.standard.set(Array(historyRefreshedSources), forKey: "kFullHistorySourcesV1")
         } catch {
             print("Failed to fetch \(url): \(error)")
             // Keep the source enabled and retain its cached apps after transient network failures.
@@ -786,12 +790,7 @@ class AppStoreViewModel: ObservableObject {
     
     // Updated to use the correct key logic
     func getVersions(for app: AppItem) -> [AppItem] {
-        let key = AppStoreViewModel.generateGroupingKey(for: app, strict: self.strictGrouping)
-        guard let list = allAppsByVariant[key] else { return [] }
-        
-        return list.sorted {
-            $0.version.compare($1.version, options: .numeric) == .orderedDescending
-        }
+        CatalogSelection.history(for: app, in: allAppsByVariant.values.flatMap { $0 })
     }
 }
 

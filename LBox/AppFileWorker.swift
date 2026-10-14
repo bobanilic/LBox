@@ -88,6 +88,13 @@ actor AppFileWorker {
         try UpdateRecovery.replaceBundle(at: existing, with: prepared)
     }
 
+    func prepareUpdateMetadata(backup: URL, prepared: URL) throws {
+        try UpdateRecovery.prepareMetadata(
+            oldInfo: backup.appendingPathComponent("LCAppInfo.plist"),
+            preparedInfo: prepared.appendingPathComponent("LCAppInfo.plist")
+        )
+    }
+
     func restore(_ backup: URL, to destination: URL) throws {
         if FileManager.default.fileExists(atPath: destination.path) {
             try UpdateRecovery.replaceBundle(at: destination, with: backup)

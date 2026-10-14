@@ -234,6 +234,7 @@ private struct EnhancedStoreView: View {
     @AppStorage("kStoreLayoutMode") private var layoutRawValue = EnhancedStoreLayout.list.rawValue
 
     @State private var orderedApps: [AppItem] = []
+    @State private var spotlightApp: AppItem?
     @State private var sortGeneration = 0
 
     private var layout: EnhancedStoreLayout {
@@ -261,7 +262,8 @@ private struct EnhancedStoreView: View {
                         .padding(.top, 4)
                         .padding(.bottom, 16)
 
-                    if viewModel.searchText.isEmpty, let app = orderedApps.first {
+                    if viewModel.searchText.isEmpty, viewModel.selectedRepoID == nil,
+                       let app = spotlightApp {
                         spotlight(app)
                             .padding(.horizontal, 20)
                             .padding(.bottom, 22)
@@ -333,15 +335,15 @@ private struct EnhancedStoreView: View {
         NavigationLink(destination: AppDetailView(app: app, viewModel: viewModel)) {
             HStack(spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("FROM YOUR SOURCES")
+                    Text("APP SPOTLIGHT")
                         .font(.caption2.weight(.semibold))
                         .tracking(1.2)
                         .foregroundStyle(.secondary)
-                    Text(app.name)
+                    Text(app.name.caseInsensitiveCompare("Delta") == .orderedSame ? "A little nostalgia.\nA lot of play." : "Your apps.\nMore possibilities.")
                         .font(.title2.weight(.bold))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
-                    Text(app.sourceRepoName ?? "Version \(app.version)")
+                    Text("\(app.name) · \(app.sourceRepoName ?? "Version " + app.version)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -476,14 +478,24 @@ private struct EnhancedStoreView: View {
         sortGeneration += 1
         let generation = sortGeneration
         let order = viewModel.appSortOrder
+        let query = viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let source = viewModel.selectedRepoID
+        let candidates = query.isEmpty ? apps : viewModel.allAppsByVariant.values.flatMap { $0 }
+        let spotlightCatalog = viewModel.displayApps
 
         Task {
             let sorted = await Task.detached(priority: .userInitiated) {
-                Self.stableSort(apps, by: order)
+                let matches = query.isEmpty ? candidates : candidates.filter {
+                    (source == nil || $0.sourceRepoName == source) &&
+                    ($0.name.lowercased().contains(query) || $0.bundleIdentifier.lowercased().contains(query))
+                }
+                let listings = query.isEmpty ? matches : CatalogSelection.latestPerSource(matches)
+                return (Self.stableSort(listings, by: order), CatalogSelection.spotlight(in: spotlightCatalog))
             }.value
 
             guard generation == sortGeneration else { return }
-            orderedApps = sorted
+            orderedApps = sorted.0
+            spotlightApp = sorted.1
         }
     }
 

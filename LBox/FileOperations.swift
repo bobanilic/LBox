@@ -39,6 +39,34 @@ enum DownloadFileIdentity {
 }
 
 enum UpdateRecovery {
+    private static let generatedKeys: Set<String> = [
+        "LCPatchRevision", "LCJITLessSignID", "LCExpirationDate", "LCTeamId",
+        "LCTweakLoaderCantInject", "segCountMismatch", "LCClassicModeCache", "LBoxNeedsPreparation"
+    ]
+
+    /// Carry forward this device's trusted container/settings metadata before
+    /// replacing an app. LiveContainer still must patch and sign the new binary.
+    static func prepareMetadata(
+        oldInfo: URL, preparedInfo: URL,
+        writer: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+    ) throws {
+        guard var info = try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: oldInfo), format: nil
+        ) as? [String: Any], info["LCContainers"] is [[String: Any]] else {
+            throw LBoxFileError.invalidMetadata
+        }
+        for key in generatedKeys { info.removeValue(forKey: key) }
+        info["LCPatchRevision"] = -1
+        info["LBoxNeedsPreparation"] = true
+        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        try writer(data, preparedInfo)
+        guard let verified = try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: preparedInfo), format: nil
+        ) as? [String: Any], NSDictionary(dictionary: verified).isEqual(to: info) else {
+            throw LBoxFileError.invalidMetadata
+        }
+    }
+
     static func containerURL(named name: String, in root: URL) -> URL? {
         guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\") else { return nil }
         let parent = root.resolvingSymlinksInPath().standardizedFileURL
@@ -62,7 +90,7 @@ enum UpdateRecovery {
             throw LBoxFileError.invalidMetadata
         }
         let retained = Set(oldContainers.compactMap { $0["folderName"] as? String })
-        for (key, value) in old { updated[key] = value }
+        for (key, value) in old where !generatedKeys.contains(key) { updated[key] = value }
         let patched = try PropertyListSerialization.data(fromPropertyList: updated, format: .xml, options: 0)
         try writer(patched, newInfo)
         guard let verified = try PropertyListSerialization.propertyList(

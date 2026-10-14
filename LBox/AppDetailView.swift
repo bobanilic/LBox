@@ -6,9 +6,8 @@ struct AppDetailView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @State private var showSetupNeeded = false
     
-    private var versionHistory: [AppItem] {
-        viewModel.getVersions(for: app)
-    }
+    @State private var loadedVersions: [AppItem] = []
+    private var versionHistory: [AppItem] { loadedVersions.isEmpty ? [app] : loadedVersions }
     
     var body: some View {
         ScrollView {
@@ -27,6 +26,15 @@ struct AppDetailView: View {
         }
         .background(Color(.systemGroupedBackground))
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: "\(app.id)|\(viewModel.catalogRevision)") {
+            let catalog = viewModel.allAppsByVariant.values.flatMap { $0 }
+            let selected = app
+            let history = await Task.detached(priority: .userInitiated) {
+                CatalogSelection.history(for: selected, in: catalog)
+            }.value
+            guard !Task.isCancelled else { return }
+            loadedVersions = history
+        }
         .alert("Setup Required", isPresented: $showSetupNeeded) {
             Button("Open LiveContainer") {
                 let name = downloadManager.getInstalledAppName(bundleID: app.bundleIdentifier) ?? "Unknown"
@@ -142,8 +150,12 @@ struct AppDetailView: View {
     
     private var versionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("Version History")
+            sectionTitle("Versions & Sources")
             
+            Text(versionHistory.count == 1 ? "The enabled sources currently publish one version of this app." : "Choose any published version below. Each entry shows its source.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 18)
             VStack(spacing: 0) {
                 ForEach(versionHistory.indices, id: \.self) { index in
                     VersionRow(app: versionHistory[index])

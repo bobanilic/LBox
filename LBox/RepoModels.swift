@@ -229,10 +229,11 @@ private struct RepoAppRecord: Decodable {
     let releases: [AppItem]
 
     init(from decoder: Decoder) throws {
-        if let legacy = try? AppItem(from: decoder) {
-            releases = [legacy]
-        } else if let modern = try? AltStoreAppRecord(from: decoder), !modern.versions.isEmpty {
-            releases = modern.versions.map { release in
+        let legacy = try? AppItem(from: decoder)
+        let modern = try? AltStoreAppRecord(from: decoder)
+        var items = legacy.map { [$0] } ?? []
+        if let modern {
+            items.append(contentsOf: modern.versions.map { release in
                 AppItem(
                     name: modern.name, bundleIdentifier: modern.bundleIdentifier,
                     version: release.version, versionDate: release.date, size: release.size,
@@ -240,11 +241,12 @@ private struct RepoAppRecord: Decodable {
                     localizedDescription: modern.localizedDescription ?? modern.subtitle,
                     screenshotURLs: modern.screenshotURLs
                 )
-            }
-        } else {
-            // Invalid records fail the refresh, preserving the last known good catalog.
-            releases = [try AppItem(from: decoder)]
+            })
         }
+        if items.isEmpty { items = [try AppItem(from: decoder)] }
+        var seen = Set<String>()
+        releases = items.filter { seen.insert($0.id).inserted }
+
     }
 }
 

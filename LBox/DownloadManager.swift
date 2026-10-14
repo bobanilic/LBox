@@ -251,6 +251,10 @@ class DownloadManager: NSObject, ObservableObject {
                 // 2. Check Content (Must have at least one container)
                 if let data = try? Data(contentsOf: plistURL),
                    let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+                    if plist["LBoxNeedsPreparation"] as? Bool == true {
+                        Logger.shared.log("CheckUpdate: Waiting for LiveContainer to patch and sign the updated binary.")
+                        return false
+                    }
                     
                     if let containers = plist["LCContainers"] as? [[String: Any]] {
                         if containers.isEmpty {
@@ -788,6 +792,9 @@ class DownloadManager: NSObject, ObservableObject {
                     )
                     pendingBackups.append(record)
                     savePendingBackups()
+                    if hadInfo {
+                        try await AppFileWorker.shared.prepareUpdateMetadata(backup: backupURL, prepared: pending.extractedAppURL)
+                    }
                     try await AppFileWorker.shared.replace(existing.url, with: pending.extractedAppURL)
                 case .cancel:
                     return
