@@ -115,7 +115,12 @@ struct EnhancedInstalledAppsView: View {
     private func updateAll() {
         var urls = Set<URL>()
         for app in updateApps {
-            guard let match = sourceIndex[app.bundleID.lowercased()]?.first,
+            guard let current = app.version,
+                  let target = viewModel.availableUpdates[app.bundleID],
+                  target.compare(current, options: .numeric) == .orderedDescending,
+                  let match = sourceIndex[app.bundleID.lowercased()]?.first(where: {
+                      $0.version.compare(target, options: .numeric) == .orderedSame
+                  }),
                   let url = URL(string: match.downloadURL), urls.insert(url).inserted else { continue }
             downloadManager.startDownload(url: url)
         }
@@ -148,6 +153,12 @@ private struct EnhancedInstalledAppItem: View {
 
     private var latestSourceMatch: AppItem? {
         sourceMatches.first
+    }
+
+    private var updateSourceMatch: AppItem? {
+        guard let target = newVersion, let installed = app.version,
+              target.compare(installed, options: .numeric) == .orderedDescending else { return nil }
+        return sourceMatches.first { $0.version.compare(target, options: .numeric) == .orderedSame }
     }
 
     private var preferredSourceMatch: AppItem? {
@@ -185,13 +196,13 @@ private struct EnhancedInstalledAppItem: View {
             .buttonStyle(.plain)
 
             Button {
-                if newVersion != nil, let source = latestSourceMatch { downloadIPA(source) }
+                if newVersion != nil, let source = updateSourceMatch { downloadIPA(source) }
                 else { launchApp() }
             } label: {
                 Text(newVersion == nil ? "Open" : "Update")
             }
             .buttonStyle(LBoxCapsuleButtonStyle())
-            .disabled(newVersion != nil && latestSourceMatch == nil)
+            .disabled(newVersion != nil && updateSourceMatch == nil)
 
             Menu { ipaActions } label: {
                 Image(systemName: "ellipsis")

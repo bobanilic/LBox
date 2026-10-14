@@ -442,7 +442,7 @@ struct InstalledAppItem: View {
                     }
                 }
                 Text(app.name).font(.caption).lineLimit(2).frame(height: 35, alignment: .top)
-                if let newVer = newVersion {
+                if newVersion != nil {
                     Button {
                         viewModel.searchText = app.bundleID
                         selectedTab = 0 
@@ -919,7 +919,7 @@ struct SettingsView: View {
                     }
                 } 
             }
-            .onChange(of: showFolderImporter) { _, isPresented in 
+            .onChange(of: showFolderImporter) { _, isPresented in
                 // Only run Help logic if we were picking for LiveContainer
                 if isPickingLiveContainer {
                     if !isPresented { 
