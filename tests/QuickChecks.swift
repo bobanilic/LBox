@@ -46,6 +46,31 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
         let restored = try JSONDecoder().decode([AppItem].self, from: JSONEncoder().encode(repo.apps))
         try expect(restored == repo.apps, "Cached app metadata must round-trip")
 
+        for (fixture, expectedApps) in [("side", 23), ("alt", 43)] {
+            let data = try Data(contentsOf: URL(fileURLWithPath: "tests/fixtures/\(fixture).json"))
+            let decoded = try JSONDecoder().decode(RepoResponse.self, from: data)
+            try expect(Set(decoded.apps.map { $0.name }).count == expectedApps, "Actual \(fixture) feed must load all app listings")
+            try expect(decoded.skippedRecords == 0, "Actual \(fixture) feed must decode without skipped apps")
+        }
+        let optionalMetadata = #"{"apps":[{"name":"Valid","bundleIdentifier":"test.valid","version":2,"size":"1024","localizedDescription":7,"downloadURL":"https://one.test/valid.ipa"},{"name":"Broken"}]}"#
+        let tolerant = try JSONDecoder().decode(RepoResponse.self, from: Data(optionalMetadata.utf8))
+        try expect(tolerant.apps.count == 1 && tolerant.skippedRecords == 1, "One malformed listing must not reject the entire feed")
+        try expect(tolerant.apps[0].size == 1024 && tolerant.apps[0].version == "2", "Numeric/string metadata variants must remain usable")
+
+        let fixtureURL = URL(string: "https://one.test/source.json")!
+        let ordinaryResponse = URLResponse(url: fixtureURL, mimeType: "application/json", expectedContentLength: mixed.utf8.count, textEncodingName: "utf-8")
+        guard case .data = try RepositoryTransport.payload(data: Data(mixed.utf8), response: ordinaryResponse) else {
+            throw CheckError.failed("A valid feed with a plain URLResponse must load as in the working version")
+        }
+        let notModified = HTTPURLResponse(url: fixtureURL, statusCode: 304, httpVersion: nil, headerFields: nil)!
+        guard case .notModified = try RepositoryTransport.payload(data: Data(), response: notModified) else {
+            throw CheckError.failed("HTTP 304 must use the saved catalog instead of becoming a failed source")
+        }
+        do {
+            _ = try RepositoryTransport.payload(data: Data("<html>closed</html>".utf8), response: ordinaryResponse)
+            throw CheckError.failed("Web pages must not be accepted as app repositories")
+        } catch RepositoryLoadError.notJSON {}
+
         let first = URL(string: "https://one.test/app.ipa")!
         let second = URL(string: "https://two.test/app.ipa")!
         let next = URL(string: "https://one.test/app.ipa?v=2")!

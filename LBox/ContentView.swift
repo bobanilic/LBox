@@ -759,7 +759,7 @@ struct SettingsView: View {
                     Button("Import Repos (JSON)") { showImporter = true }
                 }
                 Section("About") {
-                    Text("LBox v1.3.3 Preview")
+                    Text("LBox v1.3.4 Preview")
                     #if DEBUG
                     NavigationLink("Debug Logs") { DebugLogView() }
                     #endif
@@ -969,6 +969,22 @@ struct RepoManagementView: View {
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
+                    if case .error(let message) = repo.fetchStatus {
+                        Text(message)
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                            .lineLimit(3)
+                        if repo.cachedApps != nil {
+                            Text("Showing saved apps")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if case .warning(let message) = repo.fetchStatus {
+                        Text(message)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .lineLimit(2)
+                    }
                 }
             }
         }
@@ -999,6 +1015,8 @@ struct RepoManagementView: View {
                 statusIcon("clock", foreground: .secondary)
             case .error:
                 statusIcon("exclamationmark.triangle.fill", foreground: .red)
+            case .warning:
+                statusIcon("exclamationmark.triangle.fill", foreground: .orange)
             default:
                 CachedRemoteImage(
                     url: URL(string: repo.iconURL ?? ""),
@@ -1023,6 +1041,21 @@ struct RepoManagementView: View {
     
     @ViewBuilder
     private func repositoryContextMenu(_ repo: SavedRepo) -> some View {
+        if !repo.isFolder {
+            Button {
+                Task {
+                    await viewModel.fetchRepo(id: repo.id)
+                    await viewModel.refreshDisplayApps()
+                }
+            } label: {
+                Label("Retry Source", systemImage: "arrow.clockwise")
+            }
+            if case .error(let message) = repo.fetchStatus {
+                Button("Copy Error Details") {
+                    UIPasteboard.general.string = "\(repo.name)\n\(repo.url?.host ?? "")\n\(message)"
+                }
+            }
+        }
         if repo.isFolder {
             if repo.isRemoteFolder {
                 Button {

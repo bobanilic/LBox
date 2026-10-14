@@ -544,7 +544,7 @@ class AppStoreViewModel: ObservableObject {
             request.cachePolicy = .useProtocolCachePolicy
             request.timeoutInterval = 20
             let (data, response) = try await URLSession.shared.data(for: request)
-            try DownloadFileIdentity.validate(response)
+            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) { throw RepositoryLoadError.httpStatus(http.statusCode) }
             guard let string = String(data: data, encoding: .utf8) else { throw URLError(.cannotDecodeContentData) }
             let lines = string.components(separatedBy: .newlines)
             
@@ -616,12 +616,17 @@ class AppStoreViewModel: ObservableObject {
         updateRepoStatus(id: id, status: .loading)
         
         do {
-            var request = URLRequest(url: url)
-            request.cachePolicy = .useProtocolCachePolicy
-            request.timeoutInterval = 20
-            let (data, response) = try await URLSession.shared.data(for: request)
-            try DownloadFileIdentity.validate(response)
-            
+            var payload = try await RepositoryTransport.load(url)
+            if case .notModified = payload {
+                if repo.cachedApps != nil {
+                    updateRepoStatus(id: id, status: .success)
+                    if saveAfter { saveRepos() }
+                    return
+                }
+                payload = try await RepositoryTransport.load(url, bypassCache: true)
+            }
+            guard case .data(let data) = payload else { throw RepositoryLoadError.notModifiedWithoutCache }
+
             // Offload decoding to background thread
             let (decoded, apps) = try await Task.detached {
                 let decoded = try JSONDecoder().decode(RepoResponse.self, from: data)
@@ -632,15 +637,15 @@ class AppStoreViewModel: ObservableObject {
             guard var updatedRepo = getRepo(id) else { return }
             updatedRepo.name = decoded.name
             if let bestIcon = decoded.bestIconURL { updatedRepo.iconURL = bestIcon }
-            updatedRepo.appCount = decoded.apps.count
-            updatedRepo.fetchStatus = .success
+            updatedRepo.appCount = Set(decoded.apps.map { "\($0.bundleIdentifier)|\($0.name)" }).count
+            updatedRepo.fetchStatus = decoded.skippedRecords == 0 ? .success : .warning("Loaded usable apps; skipped \(decoded.skippedRecords) invalid entries.")
             updatedRepo.cachedApps = apps
             updateNode(updatedRepo)
         } catch {
             print("Failed to fetch \(url): \(error)")
             // Keep the source enabled and retain its cached apps after transient network failures.
             guard var failed = getRepo(id) else { return }
-            failed.fetchStatus = .error(error.localizedDescription)
+            failed.fetchStatus = .error(RepositoryTransport.errorDescription(error))
             updateNode(failed)
         }
         

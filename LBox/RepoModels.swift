@@ -8,6 +8,7 @@ enum RepoFetchStatus: Equatable, Sendable, Hashable {
     case loading
     case success
     case error(String)
+    case warning(String)
 }
 
 // MARK: - Sorting Enums
@@ -91,18 +92,21 @@ struct AppItem: Codable, Identifiable, Hashable, Sendable {
             bundleIdentifier = "unknown.bundle.id"
         }
 
-        version = try container.decode(String.self, forKey: .version)
-        versionDate = try container.decodeIfPresent(String.self, forKey: .versionDate)
-        size = try container.decodeIfPresent(Int64.self, forKey: .size)
+        guard let parsedVersion = container.flexibleString(forKey: .version) else {
+            throw DecodingError.keyNotFound(CodingKeys.version, .init(codingPath: decoder.codingPath, debugDescription: "Missing app version"))
+        }
+        version = parsedVersion
+        versionDate = try? container.decodeIfPresent(String.self, forKey: .versionDate)
+        size = container.flexibleSize(forKey: .size)
         downloadURL = try container.decode(String.self, forKey: .downloadURL)
 
         if let iUrl = try? container.decode(String.self, forKey: .iconURL) {
             iconURL = iUrl
         } else {
-            iconURL = try container.decodeIfPresent(String.self, forKey: .icon)
+            iconURL = try? container.decodeIfPresent(String.self, forKey: .icon)
         }
 
-        localizedDescription = try container.decodeIfPresent(String.self, forKey: .localizedDescription)
+        localizedDescription = try? container.decodeIfPresent(String.self, forKey: .localizedDescription)
 
         if let screens = try? container.decode([String].self, forKey: .screenshotURLs) {
             screenshotURLs = screens
@@ -157,15 +161,18 @@ private struct AltStoreVersionRecord: Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        version = try container.decode(String.self, forKey: .version)
+        guard let parsedVersion = container.flexibleString(forKey: .version) else {
+            throw DecodingError.keyNotFound(CodingKeys.version, .init(codingPath: decoder.codingPath, debugDescription: "Missing app version"))
+        }
+        version = parsedVersion
 
-        if let primaryDate = try container.decodeIfPresent(String.self, forKey: .date) {
+        if let primaryDate = try? container.decodeIfPresent(String.self, forKey: .date) {
             date = primaryDate
         } else {
-            date = try container.decodeIfPresent(String.self, forKey: .versionDate)
+            date = try? container.decodeIfPresent(String.self, forKey: .versionDate)
         }
 
-        size = try container.decodeIfPresent(Int64.self, forKey: .size)
+        size = container.flexibleSize(forKey: .size)
         downloadURL = try container.decode(String.self, forKey: .downloadURL)
     }
 }
@@ -199,19 +206,19 @@ private struct AltStoreAppRecord: Decodable, Sendable {
             bundleIdentifier = "unknown.bundle.id"
         }
 
-        if let primaryIcon = try container.decodeIfPresent(String.self, forKey: .iconURL) {
+        if let primaryIcon = try? container.decodeIfPresent(String.self, forKey: .iconURL) {
             iconURL = primaryIcon
         } else {
-            iconURL = try container.decodeIfPresent(String.self, forKey: .icon)
+            iconURL = try? container.decodeIfPresent(String.self, forKey: .icon)
         }
 
-        localizedDescription = try container.decodeIfPresent(String.self, forKey: .localizedDescription)
-        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        localizedDescription = try? container.decodeIfPresent(String.self, forKey: .localizedDescription)
+        subtitle = try? container.decodeIfPresent(String.self, forKey: .subtitle)
 
-        if let primaryScreenshots = try container.decodeIfPresent([String].self, forKey: .screenshotURLs) {
+        if let primaryScreenshots = try? container.decodeIfPresent([String].self, forKey: .screenshotURLs) {
             screenshotURLs = primaryScreenshots
         } else {
-            screenshotURLs = try container.decodeIfPresent([String].self, forKey: .screenshots) ?? []
+            screenshotURLs = (try? container.decodeIfPresent([String].self, forKey: .screenshots)) ?? []
         }
 
         versions = try container.decodeIfPresent([AltStoreVersionRecord].self, forKey: .versions) ?? []
@@ -222,7 +229,9 @@ private struct RepoAppRecord: Decodable {
     let releases: [AppItem]
 
     init(from decoder: Decoder) throws {
-        if let modern = try? AltStoreAppRecord(from: decoder), !modern.versions.isEmpty {
+        if let legacy = try? AppItem(from: decoder) {
+            releases = [legacy]
+        } else if let modern = try? AltStoreAppRecord(from: decoder), !modern.versions.isEmpty {
             releases = modern.versions.map { release in
                 AppItem(
                     name: modern.name, bundleIdentifier: modern.bundleIdentifier,
@@ -245,6 +254,7 @@ struct RepoResponse: Decodable, Sendable {
     let iconURL: String?
     let META: MetaData?
     let apps: [AppItem]
+    let skippedRecords: Int
 
     enum CodingKeys: String, CodingKey {
         case name, identifier, iconURL, META, apps
@@ -252,14 +262,26 @@ struct RepoResponse: Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown Source"
-        identifier = try container.decodeIfPresent(String.self, forKey: .identifier)
-        iconURL = try container.decodeIfPresent(String.self, forKey: .iconURL)
-        META = try container.decodeIfPresent(MetaData.self, forKey: .META)
+        name = (try? container.decodeIfPresent(String.self, forKey: .name)) ?? "Unknown Source"
+        identifier = try? container.decodeIfPresent(String.self, forKey: .identifier)
+        iconURL = try? container.decodeIfPresent(String.self, forKey: .iconURL)
+        META = try? container.decodeIfPresent(MetaData.self, forKey: .META)
 
         // Decode each entry independently: a feed may mix legacy and versions[] records.
-        let records = try container.decode([RepoAppRecord].self, forKey: .apps)
-        apps = records.flatMap { $0.releases }
+        var records = try container.nestedUnkeyedContainer(forKey: .apps)
+        var releases: [AppItem] = []
+        var skipped = 0
+        let originalCount = records.count ?? 0
+        while !records.isAtEnd {
+            let recordDecoder = try records.superDecoder()
+            do { releases.append(contentsOf: try RepoAppRecord(from: recordDecoder).releases) }
+            catch { skipped += 1 }
+        }
+        guard !releases.isEmpty || originalCount == 0 else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "No usable app records found in this source"))
+        }
+        apps = releases
+        skippedRecords = skipped
 
     }
 
@@ -403,7 +425,7 @@ struct SavedRepo: Codable, Identifiable, Hashable, Sendable {
 
         self.url = try container.decodeIfPresent(URL.self, forKey: .url)
         self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown"
-        self.iconURL = try container.decodeIfPresent(String.self, forKey: .iconURL)
+        self.iconURL = try? container.decodeIfPresent(String.self, forKey: .iconURL)
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         self.children = try container.decodeIfPresent([SavedRepo].self, forKey: .children)
         self.appCount = try container.decodeIfPresent(Int.self, forKey: .appCount) ?? 0
@@ -430,5 +452,23 @@ struct SavedRepo: Codable, Identifiable, Hashable, Sendable {
         return lhs.id == rhs.id && lhs.name == rhs.name && lhs.url == rhs.url && lhs.iconURL == rhs.iconURL &&
                lhs.isEnabled == rhs.isEnabled && lhs.children == rhs.children && lhs.appCount == rhs.appCount && lhs.fetchStatus == rhs.fetchStatus &&
                lhs.repoListURL == rhs.repoListURL
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func flexibleString(forKey key: Key) -> String? {
+        if let value = try? decode(String.self, forKey: key) { return value }
+        if let value = try? decode(Int64.self, forKey: key) { return String(value) }
+        if let value = try? decode(Double.self, forKey: key), value.isFinite { return String(value) }
+        return nil
+    }
+
+    func flexibleSize(forKey key: Key) -> Int64? {
+        if let value = try? decode(Int64.self, forKey: key) { return value >= 0 ? value : nil }
+        if let value = try? decode(String.self, forKey: key), let parsed = Int64(value) { return parsed >= 0 ? parsed : nil }
+        if let value = try? decode(Double.self, forKey: key), value.isFinite, value >= 0, value < Double(Int64.max) {
+            return Int64(value)
+        }
+        return nil
     }
 }

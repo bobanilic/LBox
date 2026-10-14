@@ -64,6 +64,10 @@ On macOS with Xcode installed, run `bash tests/run-quick-checks.sh`. These offli
 
 Device checks: pause/resume an IPA; lock the phone during a download and reopen LBox; install a larger IPA while scrolling; update an existing LiveContainer app and confirm its data survives; refresh a repository containing a newer version without adding apps; add ShrubLibrary and refresh again.
 
+### Source compatibility correction (1.3.4)
+
+Repository loading keeps the previous version's normal cache behavior, accepts valid JSON delivered through a plain `URLResponse`, and treats HTTP 304 as an unchanged catalog. Binary IPA downloads retain their separate strict response checks. Optional metadata differences or a single malformed app no longer reject an otherwise usable feed. Sources show their actual fetch/format error below the name, retain saved apps after a failed refresh, and provide Retry Source / Copy Error Details actions. Short regression checks include current SideStore Team Picks and AltGallery feed fixtures.
+
 1.  **Initial Setup**: Upon first launch, LBox will ask for the LiveContainer directory. Select the root folder of your installed LiveContainer app. This step is required for auto-installation and launching apps.
 2.  **Add a Source**: Input a URL to a compliant app repository JSON **or** add a "Folder" utilizing a list URL to batch-import repos.
 3.  **Browse & Download**: Find the app you want and tap "Get". LBox handles the download in the background.

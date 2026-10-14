@@ -260,7 +260,9 @@ actor ShrubLibraryCatalogResolver {
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html,application/json,text/javascript,*/*;q=0.8", forHTTPHeaderField: "Accept")
         let (data, response) = try await session.data(for: request)
-        try DownloadFileIdentity.validate(response)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw RepositoryLoadError.httpStatus(http.statusCode)
+        }
         guard data.count <= 16 * 1024 * 1024 else { throw URLError(.dataLengthExceedsMaximum) }
         return String(decoding: data, as: UTF8.self)
     }

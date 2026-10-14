@@ -1,0 +1,826 @@
+{
+  "name": "SideStore Team Picks",
+  "identifier": "com.sidestoreapps.community",
+  "iconURL": "https://sidestore.io/assets/icon.png",
+  "apps": [
+    {
+      "name": "PPSSPP",
+      "bundleIdentifier": "org.ppsspp.ppsspp",
+      "version": "1.13.2",
+      "versionDate": "2022-09-18T23:59:49Z",
+      "downloadURL": "https://github.com/QuarkSources/ppsspp-builder/releases/download/v1.13.2/PPSSPP_v1.13.2.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/JP0Fncv.png",
+      "size": 14509458,
+      "screenshotURLs": [
+        "https://i.imgur.com/CWl6GgH.png",
+        "https://i.imgur.com/SxmN1M0.png",
+        "https://i.imgur.com/sGWgR6z.png",
+        "https://i.imgur.com/AFKTdmZ.png"
+      ],
+      "subtitle": "Fixture text",
+      "versions": [
+        {
+          "version": "1.13.2",
+          "date": "2022-09-18T23:59:49Z",
+          "downloadURL": "https://github.com/QuarkSources/ppsspp-builder/releases/download/v1.13.2/PPSSPP_v1.13.2.ipa",
+          "size": 14509458
+        }
+      ]
+    },
+    {
+      "name": "Countdown",
+      "bundleIdentifier": "com.neo.countdown",
+      "version": "1.6",
+      "versionDate": "2025-02-22T21:37:29-05:00",
+      "downloadURL": "https://github.com/neoarz/Countdown-App/releases/download/1.6/Countdown.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://github.com/neoarz/Countdown-App/raw/main/Assets/CountdownLogo.jpg",
+      "size": 720000,
+      "screenshotURLs": [
+        "https://raw.githubusercontent.com/neoarz/Countdown-App/main/RepoAssets/Clock.jpeg",
+        "https://raw.githubusercontent.com/neoarz/Countdown-App/main/RepoAssets/UserAgreementBroken.jpeg",
+        "https://raw.githubusercontent.com/neoarz/Countdown-App/main/RepoAssets/AcceptTOC.jpeg"
+      ],
+      "subtitle": "Fixture text",
+      "versions": [
+        {
+          "version": "1.6",
+          "date": "2025-02-22T21:37:29-05:00",
+          "downloadURL": "https://github.com/neoarz/Countdown-App/releases/download/1.6/Countdown.ipa",
+          "size": 720000
+        }
+      ]
+    },
+    {
+      "name": "StikNES",
+      "bundleIdentifier": "com.stik.StikNES",
+      "version": "5.2",
+      "versionDate": "2025-02-22T21:37:29-05:00",
+      "downloadURL": "https://github.com/StikEMU/StikNES-2.0/releases/download/v2.0.2/StikNES.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://github.com/StikEMU/StikNES-Site/blob/main/Website/logo.png?raw=true",
+      "size": 490000,
+      "screenshotURLs": [
+        "https://github.com/StikEMU/StikNES-Site/blob/main/Website/screenshot1.png?raw=true",
+        "https://github.com/StikEMU/StikNES-Site/blob/main/Website/screenshot2.png?raw=true",
+        "https://github.com/StikEMU/StikNES-Site/blob/main/Website/screenshot3.png?raw=true"
+      ],
+      "subtitle": "Fixture text",
+      "versions": [
+        {
+          "version": "5.2",
+          "date": "2025-02-22T21:37:29-05:00",
+          "downloadURL": "https://github.com/StikEMU/StikNES-2.0/releases/download/v2.0.2/StikNES.ipa",
+          "size": 490000
+        }
+      ]
+    },
+    {
+      "name": "RetroArch",
+      "bundleIdentifier": "com.libretro.RetroArchiOS11",
+      "subtitle": "Fixture text",
+      "version": "1.12.0",
+      "versionDate": "2022-10-17",
+      "downloadURL": "https://buildbot.libretro.com/stable/1.12.0/apple/ios-arm64/RetroArch.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/pqgVB0v.png",
+      "size": 435770036,
+      "screenshotURLs": [
+        "https://i.imgur.com/uv1x1c4.png",
+        "https://i.imgur.com/qJdyNl2.png",
+        "https://i.imgur.com/fijaR4n.png",
+        "https://i.imgur.com/B3J5zMB.png",
+        "https://i.imgur.com/4Mj77IY.png"
+      ],
+      "versions": [
+        {
+          "version": "1.12.0",
+          "date": "2022-10-18",
+          "downloadURL": "https://buildbot.libretro.com/stable/1.12.0/apple/ios-arm64/RetroArch.ipa",
+          "size": 255389680
+        },
+        {
+          "version": "1.9.0",
+          "date": "2020-08-07",
+          "downloadURL": "https://github.com/QuarkSources/quarksources.github.io/releases/download/v1.0/RetroArch.ipa",
+          "size": 255389680
+        }
+      ]
+    },
+    {
+      "name": "Flappy Bird",
+      "bundleIdentifier": "org.brandonplank.flappybird",
+      "subtitle": "Fixture text",
+      "version": "4.3",
+      "versionDate": "2022-06-14T20:54:11Z",
+      "downloadURL": "https://github.com/crypticplank/flappybird/releases/download/4.3/org.brandonplank.flappybird.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/tIUJeSs.png",
+      "size": 2099365,
+      "screenshotURLs": [
+        "https://i.imgur.com/nIq1VVv.png",
+        "https://i.imgur.com/TZBdg7M.png",
+        "https://i.imgur.com/41u9JUh.png"
+      ],
+      "versions": [
+        {
+          "version": "4.3",
+          "date": "2022-06-14T20:54:11Z",
+          "downloadURL": "https://github.com/crypticplank/flappybird/releases/download/4.3/org.brandonplank.flappybird.ipa",
+          "size": 2099365
+        }
+      ]
+    },
+    {
+      "bundleIdentifier": "app.ish.iSH",
+      "name": "iSH",
+      "iconURL": "https://ish.app/assets/icon-full.png",
+      "subtitle": "Fixture text",
+      "localizedDescription": "Fixture text",
+      "screenshotURLs": [
+        "https://ish.app/assets/front-iphone-full.png",
+        "https://user-images.githubusercontent.com/64176728/216813647-1f660131-b5fe-4951-b46b-44fcfad0c2f2.png"
+      ],
+      "version": "1.3.2",
+      "versionDate": "2023-04-23T04:37:22+00:00",
+      "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/494/iSH.ipa",
+      "size": 4183791,
+      "versions": [
+        {
+          "version": "1.3.2",
+          "date": "2023-04-23T04:37:22+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/494/iSH.ipa",
+          "size": 4183791
+        },
+        {
+          "version": "Build 484",
+          "date": "2023-04-23T10:05:03+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/484/iSH.ipa",
+          "size": 4225426
+        },
+        {
+          "version": "Build 483",
+          "date": "2023-04-23T06:07:57+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/483/iSH.ipa",
+          "size": 4225981
+        },
+        {
+          "version": "Build 482",
+          "date": "2023-04-23T04:37:22+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/482/iSH.ipa",
+          "size": 4183791
+        },
+        {
+          "version": "Build 481",
+          "date": "2023-04-22T06:08:01+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/481/iSH.ipa",
+          "size": 4183616
+        },
+        {
+          "version": "Build 480",
+          "date": "2023-04-21T06:08:02+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/480/iSH.ipa",
+          "size": 4183618
+        },
+        {
+          "version": "Build 479",
+          "date": "2023-04-19T06:08:28+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/479/iSH.ipa",
+          "size": 4183615
+        },
+        {
+          "version": "Build 478",
+          "date": "2023-04-14T06:08:22+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/478/iSH.ipa",
+          "size": 4183062
+        },
+        {
+          "version": "Build 477",
+          "date": "2023-04-10T06:09:44+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/477/iSH.ipa",
+          "size": 4183084
+        },
+        {
+          "version": "Build 476",
+          "date": "2023-04-07T06:08:10+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/476/iSH.ipa",
+          "size": 4183193
+        },
+        {
+          "version": "Build 475",
+          "date": "2023-04-06T06:07:21+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/475/iSH.ipa",
+          "size": 4183183
+        },
+        {
+          "version": "Build 474",
+          "date": "2023-04-01T06:07:15+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/474/iSH.ipa",
+          "size": 4183196
+        },
+        {
+          "version": "Build 473",
+          "date": "2023-03-31T06:07:35+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/473/iSH.ipa",
+          "size": 4183189
+        },
+        {
+          "version": "Build 472",
+          "date": "2023-03-30T06:07:34+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/472/iSH.ipa",
+          "size": 4183201
+        },
+        {
+          "version": "Build 471",
+          "date": "2023-03-29T06:07:32+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/471/iSH.ipa",
+          "size": 4183199
+        },
+        {
+          "version": "Build 470",
+          "date": "2023-03-27T06:07:58+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/470/iSH.ipa",
+          "size": 4183201
+        },
+        {
+          "version": "Build 469",
+          "date": "2023-03-26T06:06:51+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/469/iSH.ipa",
+          "size": 4183205
+        },
+        {
+          "version": "Build 468",
+          "date": "2023-03-25T06:07:28+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/468/iSH.ipa",
+          "size": 4183183
+        },
+        {
+          "version": "Build 467",
+          "date": "2023-03-24T06:10:23+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/467/iSH.ipa",
+          "size": 4183196
+        },
+        {
+          "version": "Build 466",
+          "date": "2023-03-23T06:07:10+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/466/iSH.ipa",
+          "size": 4183189
+        },
+        {
+          "version": "Build 465",
+          "date": "2023-03-18T06:07:18+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/465/iSH.ipa",
+          "size": 4183185
+        },
+        {
+          "version": "Build 454",
+          "date": "2023-02-16T06:07:30+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/454/iSH.ipa",
+          "size": 4183985
+        },
+        {
+          "version": "Build 452",
+          "date": "2023-02-14T06:07:48+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/452/iSH.ipa",
+          "size": 4183981
+        },
+        {
+          "version": "Build 451",
+          "date": "2023-02-12T06:07:00+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/451/iSH.ipa",
+          "size": 4177809
+        },
+        {
+          "version": "Build 450",
+          "date": "2023-02-11T06:06:55+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/450/iSH.ipa",
+          "size": 4177826
+        },
+        {
+          "version": "Build 449",
+          "date": "2023-02-10T06:27:51+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/449/iSH.ipa",
+          "size": 4177822
+        },
+        {
+          "version": "Build 448",
+          "date": "2023-02-08T06:25:45+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/448/iSH.ipa",
+          "size": 4177813
+        },
+        {
+          "version": "Build 447",
+          "date": "2023-02-03T06:07:41+00:00",
+          "downloadURL": "https://github.com/ish-app/ish/releases/download/builds/447/iSH.ipa",
+          "size": 4177818
+        }
+      ]
+    },
+    {
+      "name": "iNDS",
+      "bundleIdentifier": "net.nerd.iNDS",
+      "subtitle": "Fixture text",
+      "version": "1.10.8",
+      "versionDate": "2021-03-01T22:39:20Z",
+      "downloadURL": "https://github.com/iNDS-Team/iNDS/releases/download/v1.10.8/iNDS.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/DbWJeF8.png",
+      "size": 8553596,
+      "screenshotURLs": [
+        "https://i.imgur.com/ap8Er1K.png",
+        "https://i.imgur.com/EgfrobI.png",
+        "https://i.imgur.com/9gLwHGD.png"
+      ],
+      "versions": [
+        {
+          "version": "1.10.8",
+          "date": "2021-03-01T22:39:20Z",
+          "downloadURL": "https://github.com/iNDS-Team/iNDS/releases/download/v1.10.8/iNDS.ipa",
+          "size": 8553596
+        }
+      ]
+    },
+    {
+      "name": "Play!",
+      "bundleIdentifier": "com.virtualapplications.play",
+      "subtitle": "Fixture text",
+      "version": "0.58-8-g70a126e3",
+      "versionDate": "2023-01-10",
+      "downloadURL": "https://s3.us-east-2.amazonaws.com/playbuilds/70a126e3/Play.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/NOi1cdl.png",
+      "size": 33200000,
+      "screenshotURLs": [
+        "https://user-images.githubusercontent.com/64176728/209461585-74b856e0-ae30-41be-91ce-d3eb262be260.png",
+        "https://user-images.githubusercontent.com/64176728/209461763-c122f9f6-5103-4c59-b730-0e5b34b5937b.png",
+        "https://user-images.githubusercontent.com/64176728/209461593-f771a49d-a44d-4d9c-8bb7-dfab48c5dd25.png"
+      ],
+      "versions": [
+        {
+          "version": "0.58-8-g70a126e3",
+          "date": "2023-01-10",
+          "downloadURL": "https://s3.us-east-2.amazonaws.com/playbuilds/70a126e3/Play.ipa",
+          "size": 33200000
+        },
+        {
+          "version": "0.58-7-gdf46379d",
+          "date": "2023-01-03",
+          "downloadURL": "https://s3.us-east-2.amazonaws.com/playbuilds/df46379d/Play.ipa",
+          "size": 33200000
+        },
+        {
+          "version": "0.57-22-g1126c39c",
+          "date": "2022-10-17",
+          "downloadURL": "https://s3.us-east-2.amazonaws.com/playbuilds/1126c39c/Play.ipa",
+          "size": 13371703
+        },
+        {
+          "version": "0.5",
+          "date": "2022-03-07",
+          "downloadURL": "https://github.com/QuarkSources/quarksources.github.io/releases/download/v1.0/Play.ipa",
+          "size": 12346902
+        }
+      ]
+    },
+    {
+      "name": "iDOS",
+      "bundleIdentifier": "com.litchie.idosgames",
+      "subtitle": "Fixture text",
+      "version": "2.1",
+      "versionDate": "2020-10-20",
+      "downloadURL": "https://github.com/litchie/dospad/releases/download/2.1/iDOS.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/Yah6zFk.png",
+      "size": 5704322,
+      "screenshotURLs": [
+        "https://i.imgur.com/hRMA2Zr.png",
+        "https://i.imgur.com/gvhvQpo.png",
+        "https://i.imgur.com/NHOE1ba.png",
+        "https://i.imgur.com/eBEqmnt.png"
+      ],
+      "versions": [
+        {
+          "version": "2.1",
+          "date": "2020-10-20",
+          "downloadURL": "https://github.com/litchie/dospad/releases/download/2.1/iDOS.ipa",
+          "size": 5704322
+        }
+      ]
+    },
+    {
+      "name": "Firebird Emu",
+      "bundleIdentifier": "com.adriweb.firebird-emu",
+      "version": "1.5",
+      "versionDate": "2023-01-07T16:36:46Z",
+      "downloadURL": "https://github.com/nspire-emus/firebird/releases/download/v1.6/firebird-iOS.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/U2HvZFZ.png",
+      "size": 9953289,
+      "screenshotURLs": [
+        "https://user-images.githubusercontent.com/64176728/211237020-f12974b6-5836-4bf1-a927-002f9e48a00f.png",
+        "https://user-images.githubusercontent.com/64176728/211237030-6c613bae-3a5e-4826-9fd6-20dfa628bd4a.png",
+        "https://user-images.githubusercontent.com/64176728/211237032-e8a72501-9c94-4d5f-b50c-ea65ef84c361.png"
+      ],
+      "subtitle": "Fixture text",
+      "versions": [
+        {
+          "date": "2023-01-07T16:36:46Z",
+          "size": 9953289,
+          "version": "1.5",
+          "downloadURL": "https://github.com/nspire-emus/firebird/releases/download/v1.6/firebird-iOS.ipa"
+        }
+      ]
+    },
+    {
+      "name": "ActiveGS iOS",
+      "bundleIdentifier": "com.yoshisuga.activeGS",
+      "version": "2021.9",
+      "versionDate": "2021-09-23T09:28:59Z",
+      "downloadURL": "https://github.com/yoshisuga/activegs-ios/releases/download/2021.9/ActiveGS.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/7LuLkoR.png",
+      "size": 16593403,
+      "screenshotURLs": [
+        "https://i.imgur.com/8xekjhv.png",
+        "https://i.imgur.com/JFd6LiM.png",
+        "https://i.imgur.com/4ZE0DbB.png"
+      ],
+      "subtitle": "Fixture text",
+      "versions": [
+        {
+          "version": "2021.9",
+          "date": "2021-09-23T09:28:59Z",
+          "downloadURL": "https://github.com/yoshisuga/activegs-ios/releases/download/2021.9/ActiveGS.ipa",
+          "size": 16593403
+        }
+      ]
+    },
+    {
+      "name": "Ready",
+      "bundleIdentifier": "at.spiderlab.c64",
+      "version": "1.6",
+      "versionDate": "2020-07-08T15:55:00Z",
+      "downloadURL": "https://github.com/T-Pau/Ready/releases/download/release-1.6/Ready-1.6.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/S9WS2C2.png",
+      "size": 63972294,
+      "screenshotURLs": [
+        "https://i.imgur.com/CN3fR34.png",
+        "https://i.imgur.com/q8ueM8W.png",
+        "https://i.imgur.com/2EHk0Wp.png",
+        "https://i.imgur.com/F3bXlmW.png"
+      ],
+      "subtitle": "Fixture text",
+      "versions": [
+        {
+          "version": "1.6",
+          "date": "2020-07-08T15:55:00Z",
+          "downloadURL": "https://github.com/T-Pau/Ready/releases/download/release-1.6/Ready-1.6.ipa",
+          "size": 63972294
+        }
+      ]
+    },
+    {
+      "name": "MAME4iOS",
+      "bundleIdentifier": "com.example.mame4ios",
+      "subtitle": "Fixture text",
+      "version": "2022.5",
+      "versionDate": "2022-12-12T02:16:35Z",
+      "downloadURL": "https://github.com/yoshisuga/MAME4iOS/releases/download/2022.5/MAME4iOS-2022.5-139.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/gZCjhLl.png",
+      "size": 52332306,
+      "screenshotURLs": [
+        "https://i.imgur.com/0JkUpEA.png",
+        "https://i.imgur.com/UJXiIUM.png"
+      ],
+      "versions": [
+        {
+          "date": "2022-12-12T02:16:35Z",
+          "size": 52332306,
+          "version": "2022.5",
+          "downloadURL": "https://github.com/yoshisuga/MAME4iOS/releases/download/2022.5/MAME4iOS-2022.5-139.ipa"
+        },
+        {
+          "version": "2022.3",
+          "date": "2022-09-17T02:33:58Z",
+          "downloadURL": "https://github.com/yoshisuga/MAME4iOS/releases/download/2022.3/MAME4tvOS-2022.3-139.ipa",
+          "size": 46033990
+        }
+      ]
+    },
+    {
+      "name": "OldOS",
+      "bundleIdentifier": "com.zurac.OldOS",
+      "subtitle": "Fixture text",
+      "version": "1.0",
+      "versionDate": "2021-11-23T19:01:37Z",
+      "downloadURL": "https://github.com/zzanehip/The-OldOS-Project/releases/download/1.0_18/OldOS.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://raw.githubusercontent.com/zzanehip/The-OldOS-Project/master/OldOS/OldOS/Assets.xcassets/AppIcon.appiconset/1024.png",
+      "size": 88173533,
+      "screenshotURLs": [
+        "https://github.com/zzanehip/The-OldOS-Project/raw/master/Images/Market_1.jpg",
+        "https://github.com/zzanehip/The-OldOS-Project/raw/master/Images/Market_2.jpg",
+        "https://github.com/zzanehip/The-OldOS-Project/raw/master/Images/Market_3.jpg",
+        "https://github.com/zzanehip/The-OldOS-Project/raw/master/Images/Market_4.jpg",
+        "https://github.com/zzanehip/The-OldOS-Project/raw/master/Images/Market_5.jpg"
+      ],
+      "versions": [
+        {
+          "version": "1.0",
+          "date": "2021-11-23T19:01:37Z",
+          "downloadURL": "https://github.com/zzanehip/The-OldOS-Project/releases/download/1.0_18/OldOS.ipa",
+          "size": 88173533
+        }
+      ]
+    },
+    {
+      "name": "unc0ver",
+      "bundleIdentifier": "science.xnu.undecimus",
+      "subtitle": "Fixture text",
+      "version": "8.0.2",
+      "versionDate": "2021-12-29T21:35:42Z",
+      "downloadURL": "https://unc0ver.dev/downloads/8.0.2/9e44edfbfd1905cadf23c3b9ad1d5bed683ce061/unc0ver_Release_8.0.2.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/5aehDxj.png",
+      "size": 54489484,
+      "screenshotURLs": [
+        "https://i.imgur.com/ItMaRRV.png",
+        "https://i.imgur.com/bjzyqpY.png",
+        "https://i.imgur.com/3TMGkaO.png",
+        "https://i.imgur.com/gTYfncm.png"
+      ],
+      "versions": [
+        {
+          "version": "8.0.2",
+          "date": "2021-12-29T21:35:42Z",
+          "downloadURL": "https://unc0ver.dev/downloads/8.0.2/9e44edfbfd1905cadf23c3b9ad1d5bed683ce061/unc0ver_Release_8.0.2.ipa",
+          "size": 54489484
+        }
+      ]
+    },
+    {
+      "name": "iTorrent",
+      "bundleIdentifier": "com.xitrix.iTorrent2",
+      "subtitle": "Fixture text",
+      "version": "2.0.14",
+      "versionDate": "2024-11-19",
+      "downloadURL": "https://github.com/XITRIX/iTorrent/releases/download/v2.0.14-1/iTorrent.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/C3KwMP5.png",
+      "size": 21218913,
+      "screenshotURLs": [
+        "https://i.imgur.com/0o7qou3.png",
+        "https://i.imgur.com/sO510zC.png",
+        "https://i.imgur.com/MQPWxYz.png",
+        "https://i.imgur.com/xTAo5uE.png"
+      ],
+      "versions": [
+        {
+          "version": "2.0.14",
+          "date": "2020-11-19",
+          "downloadURL": "https://github.com/XITRIX/iTorrent/releases/download/v2.0.14-1/iTorrent.ipa",
+          "size": 21218913
+        }
+      ]
+    },
+    {
+      "name": "Rewound",
+      "bundleIdentifier": "com.louisanslow.record",
+      "subtitle": "Fixture text",
+      "version": "2019.7",
+      "versionDate": "2019-12-09",
+      "downloadURL": "https://github.com/QuarkSources/quarksources.github.io/releases/download/v1.0/Rewound.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/LfIRxqb.png",
+      "size": 5628716,
+      "screenshotURLs": [
+        "https://i.imgur.com/IfLobOR.png",
+        "https://i.imgur.com/IJcJ6WG.png",
+        "https://i.imgur.com/dVjieD9.png",
+        "https://i.imgur.com/kmC3NtZ.png"
+      ],
+      "versions": [
+        {
+          "version": "2019.7",
+          "date": "2019-12-09",
+          "downloadURL": "https://github.com/QuarkSources/quarksources.github.io/releases/download/v1.0/Rewound.ipa",
+          "size": 5628716
+        }
+      ]
+    },
+    {
+      "name": "ScummVM",
+      "bundleIdentifier": "org.scummvm.scummvm",
+      "subtitle": "Fixture text",
+      "version": "2.6.0",
+      "versionDate": "2022-07-25",
+      "downloadURL": "https://downloads.scummvm.org/frs/scummvm/2.6.0/scummvm-2.6.0-ios.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/sSQhbwJ.png",
+      "size": 92033520,
+      "screenshotURLs": [
+        "https://i.imgur.com/7BHTMT0.png",
+        "https://i.imgur.com/Fp24Isf.png",
+        "https://i.imgur.com/vD3UJfE.png"
+      ],
+      "versions": [
+        {
+          "version": "2.6.0",
+          "date": "2022-07-25",
+          "downloadURL": "https://downloads.scummvm.org/frs/scummvm/2.6.0/scummvm-2.6.0-ios.ipa",
+          "size": 92033520
+        },
+        {
+          "version": "2.2.0",
+          "date": "2020-09-13",
+          "downloadURL": "https://github.com/QuarkSources/quarksources.github.io/releases/download/v1.0/ScummVM.ipa",
+          "size": 57222372
+        }
+      ]
+    },
+    {
+      "name": "Mini vMac",
+      "bundleIdentifier": "net.namedfork.minivmac",
+      "subtitle": "Fixture text",
+      "version": "2.5",
+      "versionDate": "2022-05-26T18:30:55Z",
+      "downloadURL": "https://github.com/zydeco/minivmac4ios/releases/download/v2.5/minivmac4ios-2.5.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/MGxGvKR.png",
+      "size": 1194371,
+      "screenshotURLs": [
+        "https://user-images.githubusercontent.com/64176728/211237407-e79d6562-c6c2-4a69-b8ea-4414e6b97be0.png",
+        "https://user-images.githubusercontent.com/64176728/211237433-ca07c970-747e-4fd1-a206-be07384183cb.png",
+        "https://user-images.githubusercontent.com/64176728/211237435-27c3a84c-7213-4a55-b4d9-b7a9362ffb36.png"
+      ],
+      "versions": [
+        {
+          "version": "2.5",
+          "date": "2022-05-26T18:30:55Z",
+          "downloadURL": "https://github.com/zydeco/minivmac4ios/releases/download/v2.5/minivmac4ios-2.5.ipa",
+          "size": 1194371
+        }
+      ]
+    },
+    {
+      "name": "XPatcher",
+      "bundleIdentifier": "com.wh0ba.xpatcher",
+      "subtitle": "Fixture text",
+      "version": "2.2",
+      "versionDate": "2022-01-07T10:15:55Z",
+      "downloadURL": "https://github.com/Wh0ba/XPatcher/releases/download/v2.2/XPatcher_2.2.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://i.imgur.com/cgrsWgC.png",
+      "size": 357189,
+      "screenshotURLs": [
+        "https://i.imgur.com/nFunb9n.png",
+        "https://i.imgur.com/7UvBK4J.png"
+      ],
+      "versions": [
+        {
+          "version": "2.2",
+          "date": "2022-01-07T10:15:55Z",
+          "downloadURL": "https://github.com/Wh0ba/XPatcher/releases/download/v2.2/XPatcher_2.2.ipa",
+          "size": 357189
+        }
+      ]
+    },
+    {
+      "name": "blurt.blog",
+      "bundleIdentifier": "blog.blurt.blurt",
+      "subtitle": "Fixture text",
+      "version": "1.0.7",
+      "versionDate": "2023-01-01",
+      "downloadURL": "https://github.com/sag333ar/blurt-releases/releases/download/1.0.7(36)/Runner.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/512x512.png",
+      "size": 857669,
+      "screenshotURLs": [
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/01.png",
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/02.png",
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/03.png",
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/04.png",
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/05.png",
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/06.png",
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/07.png",
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/08.png",
+        "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/appstore-screenshots/se/09.png"
+      ],
+      "versions": [
+        {
+          "version": "1.0.7",
+          "date": "2023-01-01",
+          "downloadURL": "https://github.com/sag333ar/blurt-releases/releases/download/1.0.7(36)/Runner.ipa",
+          "size": 857669
+        },
+        {
+          "version": "1.0.6",
+          "date": "2020-11-20",
+          "downloadURL": "https://github.com/sag333ar/blurt-releases/releases/download/1.0.6(35)/Runner.ipa",
+          "size": 857669
+        },
+        {
+          "version": "1.0.3",
+          "date": "2020-11-20",
+          "downloadURL": "https://gitlab.com/blurt/openblurt/blurt-mobile-app/-/raw/main/ios/releases/1.0.3/app.ipa",
+          "size": 857669
+        }
+      ]
+    },
+    {
+      "name": "VCMI",
+      "bundleIdentifier": "eu.vcmi.vcmiclient",
+      "subtitle": "Fixture text",
+      "version": "1.6.7",
+      "versionDate": "2025-02-28T12:00:00+04:00",
+      "downloadURL": "https://github.com/vcmi/vcmi/releases/download/1.6.7/VCMI-iOS.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://github.com/vcmi/vcmi/raw/develop/clientapp/icons/vcmiclient.512x512.png",
+      "size": 20863158,
+      "screenshotURLs": [
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot1.png",
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot2.png",
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot3.png",
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot4.png",
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot5.png",
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot6.png",
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot7.png",
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot8.png",
+        "https://raw.githubusercontent.com/vcmi/vcmi-updates/master/altstore/screenshots/screenshot9.png"
+      ],
+      "versions": [
+        {
+          "version": "1.6.7",
+          "date": "2025-02-28T12:00:00+04:00",
+          "downloadURL": "https://github.com/vcmi/vcmi/releases/download/1.6.7/VCMI-iOS.ipa",
+          "size": 20863158
+        },
+        {
+          "version": "1.3.2",
+          "date": "2023-09-15T12:00:00+04:00",
+          "downloadURL": "https://github.com/vcmi/vcmi/releases/download/1.3.2/VCMI-1.3.2-iOS.ipa",
+          "size": 27910340
+        },
+        {
+          "version": "1.3.1",
+          "date": "2023-08-18T12:00:00+04:00",
+          "downloadURL": "https://github.com/vcmi/vcmi/releases/download/1.3.1/VCMI-1.3.1-iOS.ipa",
+          "size": 27943336
+        },
+        {
+          "version": "1.2.1",
+          "date": "2023-04-28T12:00:00+04:00",
+          "downloadURL": "https://github.com/vcmi/vcmi/releases/download/1.2.1/VCMI-1.2.1-iOS.ipa",
+          "size": 26347869
+        },
+        {
+          "version": "1.2.0",
+          "date": "2023-04-14T12:00:00+04:00",
+          "downloadURL": "https://github.com/vcmi/vcmi/releases/download/1.2.0/VCMI-1.2.0-iOS.ipa",
+          "size": 26346303
+        },
+        {
+          "version": "1.1.1",
+          "date": "2023-02-03T12:00:00+04:00",
+          "downloadURL": "https://github.com/vcmi/vcmi/releases/download/1.1.1/VCMI-1.1.1-iOS.ipa",
+          "size": 25570455
+        },
+        {
+          "version": "1.1.0",
+          "date": "2022-12-23T12:00:00+04:00",
+          "downloadURL": "https://github.com/vcmi/vcmi/releases/download/1.1.0/VCMI-1.1.0-5278271-iOS.ipa",
+          "size": 25501741
+        }
+      ]
+    },
+    {
+      "name": "3Speak.tv - Acela",
+      "bundleIdentifier": "com.example.acela",
+      "subtitle": "Fixture text",
+      "version": "1.0.3",
+      "versionDate": "2022-12-08",
+      "downloadURL": "https://github.com/spknetwork/Android-App/releases/download/v1.0.3_48/Runner.ipa",
+      "localizedDescription": "Fixture text",
+      "iconURL": "https://github.com/spknetwork/Android-App/releases/download/v1.0.3_48/AppIcon-512.png",
+      "size": 857669,
+      "screenshotURLs": [
+        "https://github.com/spknetwork/Android-App/releases/download/v1.0.3_48/IMG_5651.PNG",
+        "https://github.com/spknetwork/Android-App/releases/download/v1.0.3_48/IMG_5652.PNG",
+        "https://github.com/spknetwork/Android-App/releases/download/v1.0.3_48/IMG_5653.PNG",
+        "https://github.com/spknetwork/Android-App/releases/download/v1.0.3_48/IMG_5654.PNG",
+        "https://github.com/spknetwork/Android-App/releases/download/v1.0.3_48/IMG_5655.PNG"
+      ],
+      "versions": [
+        {
+          "version": "1.0.3",
+          "date": "2022-12-08",
+          "downloadURL": "https://github.com/spknetwork/Android-App/releases/download/v1.0.3_48/Runner.ipa",
+          "size": 857669
+        }
+      ]
+    }
+  ]
+}
