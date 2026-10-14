@@ -494,7 +494,14 @@ class DownloadManager: NSObject, ObservableObject {
     
     func startDownload(url: URL) {
         guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
-              url.host != nil, getLocalFile(for: url) == nil, tasks[url] == nil else { return }
+              url.host != nil, getLocalFile(for: url) == nil else { return }
+        if let task = tasks[url] {
+            if task.state == .suspended {
+                downloadStates[url] = .downloading(progress: 0, written: task.countOfBytesReceived, total: task.countOfBytesExpectedToReceive)
+                task.resume()
+            }
+            return
+        }
         pendingPauseTasks[url] = nil
         beginDownload(url: url)
     }
@@ -518,8 +525,9 @@ class DownloadManager: NSObject, ObservableObject {
         tasks[url] = nil
         downloadStates[url] = .paused
         task.cancel { [weak self] data in
+            guard let self else { return }
             Task { @MainActor in
-                guard let self, self.pendingPauseTasks[url] == identifier else { return }
+                guard self.pendingPauseTasks[url] == identifier else { return }
                 self.pendingPauseTasks[url] = nil
                 if let data { self.storeResumeData(data, for: url) }
                 else { self.clearResumeData(for: url) }
@@ -533,6 +541,7 @@ class DownloadManager: NSObject, ObservableObject {
     }
 
     func cancelDownload(url: URL) {
+        if let task = tasks[url], processingTasks.contains(task.taskIdentifier) { return }
         let task = tasks.removeValue(forKey: url)
         pendingPauseTasks[url] = nil
         clearResumeData(for: url)
@@ -871,7 +880,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
                 if self.tasks[source]?.taskIdentifier == identifier {
                     self.tasks[source] = nil
                     self.clearResumeData(for: source)
-                    self.downloadStates[source] = .failed(error.localizedDescription)
+                    // A valid IPA remains available for manual installation if extraction failed.
+                    self.downloadStates[source] = downloadedFile == nil ? .failed(error.localizedDescription) : nil
                     self.sendNotification(title: "Download or Installation Failed", body: error.localizedDescription, type: .error)
                 }
             }

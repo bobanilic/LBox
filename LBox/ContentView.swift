@@ -629,7 +629,7 @@ struct DownloadRow: View {
                     }
                 }.frame(width: 28, height: 28)
             }.buttonStyle(.plain).disabled(status == .processing)
-            Button { downloadManager.cancelDownload(url: url) } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.gray).font(.title3) }.buttonStyle(.plain)
+            Button { downloadManager.cancelDownload(url: url) } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.gray).font(.title3) }.buttonStyle(.plain).disabled(status == .processing)
         }.padding(.vertical, 4)
     }
     func format(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }

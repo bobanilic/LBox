@@ -17,10 +17,19 @@ actor AppFileWorker {
     func validateIPA(at url: URL) throws {
         #if canImport(ZIPFoundation)
         let archive = try Archive(url: url, accessMode: .read)
-        guard archive.contains(where: { entry in
+        let metadata = archive.filter { entry in
             let parts = entry.path.split(separator: "/")
             return parts.count == 3 && parts[0] == "Payload" && parts[1].hasSuffix(".app") && parts[2] == "Info.plist"
-        }) else { throw LBoxFileError.invalidArchive }
+        }
+        guard metadata.count == 1, let entry = metadata.first else { throw LBoxFileError.invalidArchive }
+        var data = Data()
+        _ = try archive.extract(entry) { chunk in
+            guard data.count + chunk.count <= 1024 * 1024 else { throw LBoxFileError.invalidBundle }
+            data.append(chunk)
+        }
+        guard let info = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let bundleID = info["CFBundleIdentifier"] as? String,
+              !bundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw LBoxFileError.invalidBundle }
         #else
         throw LBoxFileError.unsupportedArchive
         #endif
