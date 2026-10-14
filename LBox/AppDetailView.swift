@@ -152,7 +152,7 @@ struct AppDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("Versions & Sources")
             
-            Text(versionHistory.count == 1 ? "The enabled sources currently publish one version of this app." : "Choose any published version below. Each entry shows its source.")
+            Text(versionHistory.count == 1 ? "One version is currently available in the loaded sources." : "Choose any published version below. Each entry shows its source.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 18)
@@ -237,6 +237,11 @@ struct VersionRow: View {
                     }
                 }
                 
+                Text(app.name)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
                 Text(metadataText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
