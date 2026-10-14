@@ -41,6 +41,8 @@ struct AppBackup: Codable, Identifiable, Sendable {
     let originalInstallPath: String 
     let date: Date
     let hadLCAppInfo: Bool 
+    // Optional for backups saved by earlier versions, which had no transaction state.
+    var replacementCompleted: Bool? = nil
 }
 
 @MainActor
@@ -89,6 +91,7 @@ class DownloadManager: NSObject, ObservableObject {
     private var isFinalizingInstallation = false
     private var finalizingUpdates = Set<String>()
     @Published var recoveryFailure: UUID?
+    private(set) var lastInstallationUpdateBackup: AppBackup?
 
     
     private let kCustomDownloadFolderKey = "kCustomDownloadFolderBookmark"
@@ -216,6 +219,9 @@ class DownloadManager: NSObject, ObservableObject {
     }
     
     func checkUpdateStatus(for backup: AppBackup) -> Bool {
+        // Preparing metadata can fail before the installed bundle is replaced.
+        // Launching the original app cannot complete that transaction.
+        guard backup.replacementCompleted != false else { return false }
         if finalizingUpdates.contains(backup.id) { return true }
         refreshInstalledApps()
         
@@ -762,6 +768,7 @@ class DownloadManager: NSObject, ObservableObject {
     func finalizeInstallation(action: InstallAction) {
         guard let pending = pendingInstallation, !isFinalizingInstallation else { return }
         isFinalizingInstallation = true
+        lastInstallationUpdateBackup = nil
         let folder = currentAppsFolder
         let backupRoot = backupDirectory
         Task {
@@ -778,24 +785,45 @@ class DownloadManager: NSObject, ObservableObject {
                     try await AppFileWorker.shared.installSeparate(pending.extractedAppURL, bundleID: pending.bundleID, in: folder)
                 case .updateExisting:
                     guard let existing = pending.existingApp else { throw LBoxFileError.invalidBundle }
-                    guard !pendingBackups.contains(where: { $0.bundleID == existing.bundleID }) else {
-                        throw LBoxFileError.invalidMetadata
+                    // Retry the same transaction with its original recovery bundle.
+                    // Never overwrite that backup with a partially updated app.
+                    let matching = pendingBackups.filter {
+                        $0.bundleID == existing.bundleID && $0.originalInstallPath == existing.url.lastPathComponent
                     }
-                    let backupUUID = UUID().uuidString
-                    let backupURL = backupRoot.appendingPathComponent(backupUUID).appendingPathComponent(existing.url.lastPathComponent)
-                    let hadInfo = FileManager.default.fileExists(atPath: existing.url.appendingPathComponent("LCAppInfo.plist").path)
-                    try await AppFileWorker.shared.createBackup(of: existing.url, at: backupURL)
-                    let record = AppBackup(
-                        bundleID: existing.bundleID, appName: existing.name, version: existing.version,
-                        backupPath: backupUUID, originalInstallPath: existing.url.lastPathComponent,
-                        date: Date(), hadLCAppInfo: hadInfo
-                    )
-                    pendingBackups.append(record)
-                    savePendingBackups()
-                    if hadInfo {
+                    guard matching.count <= 1 else { throw LBoxFileError.ambiguousRecovery }
+                    var record: AppBackup
+                    if let saved = matching.first {
+                        guard !finalizingUpdates.contains(saved.id) else { throw LBoxFileError.updateBusy }
+                        record = saved
+                    } else {
+                        let backupUUID = UUID().uuidString
+                        let backupURL = backupRoot.appendingPathComponent(backupUUID).appendingPathComponent(existing.url.lastPathComponent)
+                        let hadInfo = FileManager.default.fileExists(atPath: existing.url.appendingPathComponent("LCAppInfo.plist").path)
+                        try await AppFileWorker.shared.createBackup(of: existing.url, at: backupURL)
+                        record = AppBackup(
+                            bundleID: existing.bundleID, appName: existing.name, version: existing.version,
+                            backupPath: backupUUID, originalInstallPath: existing.url.lastPathComponent,
+                            date: Date(), hadLCAppInfo: hadInfo, replacementCompleted: false
+                        )
+                        pendingBackups.append(record)
+                        savePendingBackups()
+                    }
+                    lastInstallationUpdateBackup = record
+                    let backupURL = backupRoot.appendingPathComponent(record.backupPath).appendingPathComponent(record.originalInstallPath)
+                    // Prevent foreground verification/restoration from racing replacement.
+                    finalizingUpdates.insert(record.id)
+                    defer { finalizingUpdates.remove(record.id) }
+                    try await AppFileWorker.shared.validateRecoveryBundle(backupURL, bundleID: existing.bundleID)
+                    if record.hadLCAppInfo {
                         try await AppFileWorker.shared.prepareUpdateMetadata(backup: backupURL, prepared: pending.extractedAppURL)
                     }
                     try await AppFileWorker.shared.replace(existing.url, with: pending.extractedAppURL)
+                    record.replacementCompleted = true
+                    if let index = pendingBackups.firstIndex(where: { $0.id == record.id }) {
+                        pendingBackups[index] = record
+                        savePendingBackups()
+                    }
+                    lastInstallationUpdateBackup = record
                 case .cancel:
                     return
                 }

@@ -32,6 +32,14 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
         try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0).write(to: url)
     }
 
+    @MainActor static func waitForInstallation(_ downloads: DownloadManager) async throws {
+        let deadline = Date().addingTimeInterval(2)
+        while downloads.pendingInstallation != nil && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        try expect(downloads.pendingInstallation == nil, "Installation must finish promptly")
+    }
+
     @MainActor static func main() async throws {
         let started = Date()
         let manager = FileManager.default
@@ -140,6 +148,21 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
         try expect(!manager.fileExists(atPath: dataRoot.appendingPathComponent("temporary").path), "Unused temporary container should be cleaned")
         try expect(UpdateRecovery.containerURL(named: "../outside", in: dataRoot) == nil, "Container paths must stay inside data storage")
 
+        try writePlist(["setting": "never launched"], to: oldInfo)
+        try UpdateRecovery.prepareMetadata(oldInfo: oldInfo, preparedInfo: preparedInfo)
+        try manager.createDirectory(at: dataRoot.appendingPathComponent("first-launch"), withIntermediateDirectories: true)
+        try writePlist(["LCContainers": [["folderName": "first-launch"]], "LCDataUUID": "first-launch"], to: newInfo)
+        try UpdateRecovery.patchMetadata(oldInfo: oldInfo, newInfo: newInfo, dataRoot: dataRoot)
+        let firstLaunch = try PropertyListSerialization.propertyList(from: Data(contentsOf: newInfo), format: nil) as! [String: Any]
+        try expect(firstLaunch["LCDataUUID"] as? String == "first-launch", "Never-launched apps must retain their newly created first container")
+        try expect((firstLaunch["LCContainers"] as? [[String: Any]])?.count == 1, "Finalization must not erase a first container")
+        try expect(manager.fileExists(atPath: dataRoot.appendingPathComponent("first-launch").path), "First-launch data must not be deleted")
+        try writePlist(["LCDataUUID": "existing-data"], to: oldInfo)
+        do {
+            try UpdateRecovery.prepareMetadata(oldInfo: oldInfo, preparedInfo: preparedInfo)
+            throw CheckError.failed("Missing container metadata with existing data must fail safely")
+        } catch LBoxFileError.missingContainerMetadata {}
+
         let installed = root.appendingPathComponent("Installed.app")
         try manager.createDirectory(at: installed, withIntermediateDirectories: true)
         let marker = installed.appendingPathComponent("old-marker")
@@ -156,6 +179,64 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
         let downloads = DownloadManager(configuration: config)
         downloads.customDownloadFolder = root
         downloads.customLiveContainerFolder = root
+        let priorBackups = UserDefaults.standard.data(forKey: "kPendingBackupsKey")
+        downloads.pendingBackups = []
+        defer {
+            for backup in downloads.pendingBackups {
+                try? manager.removeItem(at: downloads.backupDirectory.appendingPathComponent(backup.backupPath))
+            }
+            UserDefaults.standard.set(priorBackups, forKey: "kPendingBackupsKey")
+        }
+        let appsFolder = root.appendingPathComponent("Applications")
+        let retryApp = appsFolder.appendingPathComponent("Retry.app")
+        try manager.createDirectory(at: retryApp, withIntermediateDirectories: true)
+        let originalAppInfo: [String: Any] = ["CFBundleIdentifier": "test.retry", "CFBundleName": "Retry", "CFBundleShortVersionString": "1.0"]
+        try writePlist(originalAppInfo, to: retryApp.appendingPathComponent("Info.plist"))
+        try writePlist(originalInfo, to: retryApp.appendingPathComponent("LCAppInfo.plist"))
+        try Data("original-binary".utf8).write(to: retryApp.appendingPathComponent("original-marker"))
+        let archive = root.appendingPathComponent("retry.ipa")
+        try Data("retained-archive".utf8).write(to: archive)
+        downloads.refreshInstalledApps()
+        let existing = downloads.installedApps.first { $0.bundleID == "test.retry" }!
+        let failingPayload = root.appendingPathComponent("failing/Payload")
+        try manager.createDirectory(at: failingPayload, withIntermediateDirectories: true)
+        downloads.pendingInstallation = PendingInstallation(appName: "Retry", bundleID: "test.retry", tempPayloadURL: failingPayload, extractedAppURL: failingPayload.appendingPathComponent("missing.app"), sourceArchiveURL: archive, existingApp: existing)
+        downloads.finalizeInstallation(action: .updateExisting)
+        try await waitForInstallation(downloads)
+        try expect(downloads.pendingBackups.count == 1, "A failed update must keep its original recovery backup")
+        let savedID = downloads.pendingBackups[0].id
+        try expect(downloads.pendingBackups[0].replacementCompleted == false, "A failed installation must not be presented as awaiting launch")
+        try expect(!downloads.checkUpdateStatus(for: downloads.pendingBackups[0]), "Opening the original app must not finalize a failed replacement")
+        try expect(manager.fileExists(atPath: archive.path) && manager.fileExists(atPath: retryApp.appendingPathComponent("original-marker").path), "Failure must preserve both the IPA and installed bundle")
+
+        // Retry once with the new transaction state and again with an old-version
+        // backup record lacking that state. Both must keep the same original backup.
+        for version in ["2.0", "3.0"] {
+            if version == "3.0" {
+                downloads.pendingBackups[0].replacementCompleted = nil
+                let legacyData = try JSONEncoder().encode(downloads.pendingBackups)
+                let migrated = try JSONDecoder().decode([AppBackup].self, from: legacyData)
+                try expect(migrated[0].replacementCompleted == nil, "Earlier recovery records must decode without transaction state")
+                downloads.pendingBackups = migrated
+            }
+            let payload = root.appendingPathComponent("retry-\(version)/Payload")
+            let preparedApp = payload.appendingPathComponent("Retry.app")
+            try manager.createDirectory(at: preparedApp, withIntermediateDirectories: true)
+            var newAppInfo = originalAppInfo
+            newAppInfo["CFBundleShortVersionString"] = version
+            try writePlist(newAppInfo, to: preparedApp.appendingPathComponent("Info.plist"))
+            downloads.refreshInstalledApps()
+            downloads.pendingInstallation = PendingInstallation(appName: "Retry", bundleID: "test.retry", tempPayloadURL: payload, extractedAppURL: preparedApp, sourceArchiveURL: archive, existingApp: downloads.installedApps.first { $0.bundleID == "test.retry" })
+            downloads.finalizeInstallation(action: .updateExisting)
+            try await waitForInstallation(downloads)
+            try expect(downloads.getInstalledVersion(bundleID: "test.retry") == version, "Retry must replace the app despite a retained backup")
+            try expect(downloads.pendingBackups.count == 1 && downloads.pendingBackups[0].id == savedID, "Retries must reuse, never overwrite or duplicate, the original recovery bundle")
+            try expect(downloads.pendingBackups[0].replacementCompleted == true, "Only successful replacement may await LiveContainer preparation")
+            let recovery = downloads.backupDirectory.appendingPathComponent(savedID).appendingPathComponent("Retry.app")
+            try expect(manager.fileExists(atPath: recovery.appendingPathComponent("original-marker").path), "Retry must retain the original binary for restoration")
+            let retryMetadata = try PropertyListSerialization.propertyList(from: Data(contentsOf: retryApp.appendingPathComponent("LCAppInfo.plist")), format: nil) as! [String: Any]
+            try expect(retryMetadata["LCDataUUID"] as? String == "retained", "Retries must preserve the original data container")
+        }
         downloads.downloadStates[first] = .paused
         downloads.resumeDownload(url: first)
         try expect(downloads.isDownloading(url: first), "A paused task without resume data must restart without recursion")

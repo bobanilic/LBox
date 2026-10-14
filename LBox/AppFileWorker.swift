@@ -88,6 +88,14 @@ actor AppFileWorker {
         try UpdateRecovery.replaceBundle(at: existing, with: prepared)
     }
 
+    func validateRecoveryBundle(_ backup: URL, bundleID: String) throws {
+        guard let data = try? Data(contentsOf: backup.appendingPathComponent("Info.plist")),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              (info["CFBundleIdentifier"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) == bundleID else {
+            throw LBoxFileError.missingRecoveryBundle
+        }
+    }
+
     func prepareUpdateMetadata(backup: URL, prepared: URL) throws {
         try UpdateRecovery.prepareMetadata(
             oldInfo: backup.appendingPathComponent("LCAppInfo.plist"),

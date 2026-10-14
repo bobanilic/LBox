@@ -88,15 +88,15 @@ struct EnhancedContentView: View {
             } else {
                 showConflictAlert = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    if let backup = downloadManager.pendingBackups.last,
+                    if let backup = downloadManager.lastInstallationUpdateBackup,
                        !downloadManager.checkUpdateStatus(for: backup) {
                         verificationBackup = backup
                     }
                 }
             }
         }
-        .alert("Complete Update", isPresented: updateAlertBinding, presenting: verificationBackup) { backup in
-            Button("Open LiveContainer") {
+        .alert(verificationBackup?.replacementCompleted == false ? "Update Not Installed" : "Complete Update", isPresented: updateAlertBinding, presenting: verificationBackup) { backup in
+            Button(backup.replacementCompleted == false ? "Open Installed App" : "Open LiveContainer") {
                 let folderName = backup.originalInstallPath
                 if let url = URL(string: "livecontainer://livecontainer-launch?bundle-name=\(folderName)") {
                     UIApplication.shared.open(url)
@@ -109,7 +109,11 @@ struct EnhancedContentView: View {
                 downloadManager.discardBackup(backup)
             }
         } message: { backup in
-            Text("Please run '\(backup.appName)' in LiveContainer to finalize the update, and then return to LBox.\n\nIf you have already run it and the update is not detected, you can try again or restore the previous version.")
+            if backup.replacementCompleted == false {
+                Text("The update to '\(backup.appName)' was not installed. Your IPA and recovery backup have been kept. Retry using Downloads → Install App → Update Existing, or restore the previous version. Opening the installed app will not finish a failed installation.")
+            } else {
+                Text("Please run '\(backup.appName)' in LiveContainer to finalize the update, and then return to LBox.\n\nIf you have already run it and the update is not detected, you can try again or restore the previous version.")
+            }
         }
         .alert("Setup LiveContainer", isPresented: $showSetupAlert) {
             Button("Select Folder") {

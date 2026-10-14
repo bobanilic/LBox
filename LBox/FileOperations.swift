@@ -5,6 +5,10 @@ enum LBoxFileError: LocalizedError {
     case invalidArchive
     case invalidBundle
     case invalidMetadata
+    case missingContainerMetadata
+    case ambiguousRecovery
+    case updateBusy
+    case missingRecoveryBundle
     case unsupportedArchive
     case httpStatus(Int)
 
@@ -13,6 +17,10 @@ enum LBoxFileError: LocalizedError {
         case .invalidArchive: return "The downloaded file is not a valid IPA archive."
         case .invalidBundle: return "The archive does not contain a valid application bundle."
         case .invalidMetadata: return "Update metadata could not be verified. The recovery backup has been kept."
+        case .missingContainerMetadata: return "The saved app has incomplete LiveContainer metadata. Restore the previous version, open it once in LiveContainer, then retry. Your IPA and recovery backup have been kept."
+        case .ambiguousRecovery: return "More than one recovery backup exists for this installation. Restore the previous version before retrying."
+        case .updateBusy: return "This app's previous update is still being finalized. Return to LBox and retry when it finishes."
+        case .missingRecoveryBundle: return "The recovery bundle is missing or does not match this app. Re-select the original LiveContainer folder or restore the app before retrying."
         case .unsupportedArchive: return "Archive support is unavailable in this build."
         case .httpStatus(let status): return "The download server returned HTTP \(status)."
         }
@@ -50,11 +58,7 @@ enum UpdateRecovery {
         oldInfo: URL, preparedInfo: URL,
         writer: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
     ) throws {
-        guard var info = try PropertyListSerialization.propertyList(
-            from: Data(contentsOf: oldInfo), format: nil
-        ) as? [String: Any], info["LCContainers"] is [[String: Any]] else {
-            throw LBoxFileError.invalidMetadata
-        }
+        var info = try trustedMetadata(at: oldInfo)
         for key in generatedKeys { info.removeValue(forKey: key) }
         info["LCPatchRevision"] = -1
         info["LBoxNeedsPreparation"] = true
@@ -65,6 +69,21 @@ enum UpdateRecovery {
         ) as? [String: Any], NSDictionary(dictionary: verified).isEqual(to: info) else {
             throw LBoxFileError.invalidMetadata
         }
+    }
+
+    private static func trustedMetadata(at url: URL) throws -> [String: Any] {
+        guard var info = try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: url), format: nil
+        ) as? [String: Any] else { throw LBoxFileError.invalidMetadata }
+        if info["LCContainers"] == nil && info["LCDataUUID"] == nil {
+            // Installed but never launched: there is no existing user container.
+            info["LCContainers"] = [[String: Any]]()
+        }
+        guard let containers = info["LCContainers"] as? [[String: Any]],
+              !containers.isEmpty || info["LCDataUUID"] == nil else {
+            throw LBoxFileError.missingContainerMetadata
+        }
+        return info
     }
 
     static func containerURL(named name: String, in root: URL) -> URL? {
@@ -81,16 +100,20 @@ enum UpdateRecovery {
         oldInfo: URL, newInfo: URL, dataRoot: URL?,
         writer: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
     ) throws {
-        let oldData = try Data(contentsOf: oldInfo)
+        let old = try trustedMetadata(at: oldInfo)
         let newData = try Data(contentsOf: newInfo)
-        guard let old = try PropertyListSerialization.propertyList(from: oldData, format: nil) as? [String: Any],
-              var updated = try PropertyListSerialization.propertyList(from: newData, format: nil) as? [String: Any],
+        guard var updated = try PropertyListSerialization.propertyList(from: newData, format: nil) as? [String: Any],
               let oldContainers = old["LCContainers"] as? [[String: Any]],
               let newContainers = updated["LCContainers"] as? [[String: Any]] else {
             throw LBoxFileError.invalidMetadata
         }
         let retained = Set(oldContainers.compactMap { $0["folderName"] as? String })
-        for (key, value) in old where !generatedKeys.contains(key) { updated[key] = value }
+        for (key, value) in old where !generatedKeys.contains(key) {
+            // A never-launched app has no user container to restore. Keep the
+            // first container LiveContainer creates instead of erasing it.
+            if oldContainers.isEmpty && (key == "LCContainers" || key == "LCDataUUID") { continue }
+            updated[key] = value
+        }
         let patched = try PropertyListSerialization.data(fromPropertyList: updated, format: .xml, options: 0)
         try writer(patched, newInfo)
         guard let verified = try PropertyListSerialization.propertyList(
@@ -98,7 +121,7 @@ enum UpdateRecovery {
         ) as? [String: Any], NSDictionary(dictionary: verified).isEqual(to: updated) else {
             throw LBoxFileError.invalidMetadata
         }
-        if let dataRoot {
+        if let dataRoot, !oldContainers.isEmpty {
             for container in newContainers {
                 guard let name = container["folderName"] as? String, !retained.contains(name),
                       let url = containerURL(named: name, in: dataRoot) else { continue }
