@@ -9,6 +9,7 @@ enum LBoxFileError: LocalizedError {
     case ambiguousRecovery
     case updateBusy
     case missingRecoveryBundle
+    case updateTargetMismatch
     case unsupportedArchive
     case httpStatus(Int)
 
@@ -21,6 +22,7 @@ enum LBoxFileError: LocalizedError {
         case .ambiguousRecovery: return "More than one recovery backup exists for this installation. Restore the previous version before retrying."
         case .updateBusy: return "This app's previous update is still being finalized. Return to LBox and retry when it finishes."
         case .missingRecoveryBundle: return "The recovery bundle is missing or does not match this app. Re-select the original LiveContainer folder or restore the app before retrying."
+        case .updateTargetMismatch: return "The downloaded app or selected installation changed. Nothing was replaced. Select the app again and retry the update."
         case .unsupportedArchive: return "Archive support is unavailable in this build."
         case .httpStatus(let status): return "The download server returned HTTP \(status)."
         }
@@ -28,6 +30,15 @@ enum LBoxFileError: LocalizedError {
 }
 
 enum DownloadFileIdentity {
+    static func displayName(for filename: String) -> String {
+        let prefix = filename.prefix(64)
+        if filename.count > 65, filename.dropFirst(64).first == "-",
+           prefix.allSatisfy({ "0123456789abcdef".contains($0) }) {
+            return String(filename.dropFirst(65))
+        }
+        return filename
+    }
+
     static func filename(for url: URL) -> String {
         let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
             .map { String(format: "%02x", $0) }.joined()
@@ -62,7 +73,9 @@ enum UpdateRecovery {
         for key in generatedKeys { info.removeValue(forKey: key) }
         info["LCPatchRevision"] = -1
         info["LBoxNeedsPreparation"] = true
-        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        // LiveContainer stores fractional NSDate values. XML rounds those dates
+        // to whole seconds, causing the subsequent equality check to fail.
+        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .binary, options: 0)
         try writer(data, preparedInfo)
         guard let verified = try PropertyListSerialization.propertyList(
             from: Data(contentsOf: preparedInfo), format: nil
@@ -114,7 +127,7 @@ enum UpdateRecovery {
             if oldContainers.isEmpty && (key == "LCContainers" || key == "LCDataUUID") { continue }
             updated[key] = value
         }
-        let patched = try PropertyListSerialization.data(fromPropertyList: updated, format: .xml, options: 0)
+        let patched = try PropertyListSerialization.data(fromPropertyList: updated, format: .binary, options: 0)
         try writer(patched, newInfo)
         guard let verified = try PropertyListSerialization.propertyList(
             from: Data(contentsOf: newInfo), format: nil

@@ -30,6 +30,23 @@ struct PendingInstallation: Identifiable, Sendable {
     let extractedAppURL: URL 
     let sourceArchiveURL: URL 
     let existingApp: LocalApp? 
+    var updateSourceURL: URL? = nil
+}
+
+struct UpdateInstallationTarget: Codable, Sendable {
+    let bundleID: String
+    let installFolder: String
+    let appsRoot: String
+    let displayName: String
+
+    func resolve(in apps: [LocalApp], root: URL, archiveBundleID: String) throws -> LocalApp {
+        guard archiveBundleID == bundleID,
+              root.standardizedFileURL.path == appsRoot,
+              let app = apps.first(where: {
+                  $0.bundleID == bundleID && $0.url.lastPathComponent == installFolder
+              }) else { throw LBoxFileError.updateTargetMismatch }
+        return app
+    }
 }
 
 struct AppBackup: Codable, Identifiable, Sendable {
@@ -86,6 +103,9 @@ class DownloadManager: NSObject, ObservableObject {
     private var processingTasks = Set<Int>()
     private var pendingPauseTasks: [URL: Int] = [:]
     private var downloadFileIndex: [String: String] = [:]
+    private var updateTargets: [String: UpdateInstallationTarget] = [:]
+    private let kUpdateTargets = "kUpdateInstallationTargetsV1"
+    private let prepareArchive: @Sendable (URL, URL) async throws -> PreparedAppArchive
     private let kDownloadFileIndex = "kDownloadFileIndexV2"
     private var installationQueue: [PendingInstallation] = []
     private var isFinalizingInstallation = false
@@ -108,7 +128,10 @@ class DownloadManager: NSObject, ObservableObject {
         self.init(configuration: nil)
     }
 
-    init(configuration: URLSessionConfiguration?) {
+    init(configuration: URLSessionConfiguration?, prepareArchive: @escaping @Sendable (URL, URL) async throws -> PreparedAppArchive = {
+        try await AppFileWorker.shared.prepare($0, in: $1)
+    }) {
+        self.prepareArchive = prepareArchive
         self.isAutoUnzipEnabled = UserDefaults.standard.bool(forKey: "kAutoUnzipEnabled")
         super.init()
         let config = configuration ?? URLSessionConfiguration.background(withIdentifier: kBackgroundSessionID)
@@ -123,6 +146,10 @@ class DownloadManager: NSObject, ObservableObject {
         self.urlSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         
         downloadFileIndex = UserDefaults.standard.dictionary(forKey: kDownloadFileIndex) as? [String: String] ?? [:]
+        if let data = UserDefaults.standard.data(forKey: kUpdateTargets),
+           let targets = try? JSONDecoder().decode([String: UpdateInstallationTarget].self, from: data) {
+            updateTargets = targets
+        }
         restoreFolders()
         restoreResumeDataMapping()
         loadPendingBackups()
@@ -185,6 +212,40 @@ class DownloadManager: NSObject, ObservableObject {
 
     private func saveDownloadFileIndex() {
         UserDefaults.standard.set(downloadFileIndex, forKey: kDownloadFileIndex)
+    }
+
+    private func saveUpdateTargets() {
+        if let data = try? JSONEncoder().encode(updateTargets) {
+            UserDefaults.standard.set(data, forKey: kUpdateTargets)
+        }
+    }
+
+    func downloadDisplayName(for file: URL) -> String {
+        if let source = downloadFileIndex.first(where: { $0.value == file.lastPathComponent })?.key,
+           let target = updateTargets[source] { return target.displayName + ".ipa" }
+        return DownloadFileIdentity.displayName(for: file.lastPathComponent)
+    }
+
+    /// An explicit Update action reuses an existing IPA and preserves the exact
+    /// installation selected by the user, including across background relaunches.
+    func updateApp(_ app: LocalApp, from url: URL, version: String) {
+        if let file = getLocalFile(for: url), extractingFiles.contains(file) { return }
+        if tasks[url] != nil, let target = updateTargets[url.absoluteString],
+           target.installFolder != app.url.lastPathComponent {
+            sendNotification(title: "Update In Progress", body: "Wait for the other installation's update to finish, then retry.", type: .info)
+            return
+        }
+        updateTargets[url.absoluteString] = UpdateInstallationTarget(
+            bundleID: app.bundleID, installFolder: app.url.lastPathComponent,
+            appsRoot: currentAppsFolder.standardizedFileURL.path,
+            displayName: "\(app.name) v\(version)"
+        )
+        saveUpdateTargets()
+        if let file = getLocalFile(for: url) {
+            convertToApp(file: file, updateSourceURL: url)
+        } else {
+            startDownload(url: url)
+        }
     }
 
     private func forgetFile(_ file: URL) {
@@ -576,9 +637,14 @@ class DownloadManager: NSObject, ObservableObject {
     
     func refreshFileList() {
         do {
-            let files = try FileManager.default.contentsOfDirectory(at: currentDownloadFolder, includingPropertiesForKeys: nil)
+            let files = try FileManager.default.contentsOfDirectory(at: currentDownloadFolder, includingPropertiesForKeys: [.contentModificationDateKey])
             let filtered = files.filter { !$0.lastPathComponent.hasPrefix(".") && $0.pathExtension != "app" }
-            self.fileList = filtered
+            self.fileList = filtered.sorted {
+                let first = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let second = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                if first != second { return first > second }
+                return $0.lastPathComponent < $1.lastPathComponent
+            }
         } catch { self.fileList = [] }
     }
     
@@ -708,7 +774,7 @@ class DownloadManager: NSObject, ObservableObject {
         refreshFileList()
     }
 
-    func convertToApp(file: URL) {
+    func convertToApp(file: URL, updateSourceURL: URL? = nil) {
         guard !extractingFiles.contains(file) else { return }
         extractingFiles.insert(file)
         Task {
@@ -719,7 +785,7 @@ class DownloadManager: NSObject, ObservableObject {
                 refreshFileList()
                 refreshInstalledApps()
             }
-            do { try await extractApp(from: file) }
+            do { try await extractApp(from: file, updateSourceURL: updateSourceURL) }
             catch { sendNotification(title: "Installation Failed", body: error.localizedDescription, type: .error) }
         }
     }
@@ -739,17 +805,33 @@ class DownloadManager: NSObject, ObservableObject {
         }
     }
     
-    private func extractApp(from sourceURL: URL) async throws {
+    private func extractApp(from sourceURL: URL, updateSourceURL: URL? = nil) async throws {
         let folder = currentAppsFolder
-        let prepared = try await AppFileWorker.shared.prepare(sourceURL, in: folder)
+        let prepared = try await prepareArchive(sourceURL, folder)
         refreshInstalledApps()
-        if let existing = installedApps.first(where: { $0.bundleID == prepared.bundleID }) {
+        let existing: LocalApp?
+        if let updateSourceURL {
+            do {
+                guard let target = updateTargets[updateSourceURL.absoluteString] else { throw LBoxFileError.updateTargetMismatch }
+                existing = try target.resolve(in: installedApps, root: folder, archiveBundleID: prepared.bundleID)
+            }
+            catch {
+                try? FileManager.default.removeItem(at: prepared.root)
+                throw error
+            }
+        } else {
+            existing = installedApps.first(where: { $0.bundleID == prepared.bundleID })
+        }
+        if let existing {
             let pending = PendingInstallation(
                 appName: existing.name, bundleID: prepared.bundleID,
                 tempPayloadURL: prepared.payload, extractedAppURL: prepared.app,
-                sourceArchiveURL: sourceURL, existingApp: existing
+                sourceArchiveURL: sourceURL, existingApp: existing, updateSourceURL: updateSourceURL
             )
-            if pendingInstallation == nil { pendingInstallation = pending }
+            if pendingInstallation == nil {
+                pendingInstallation = pending
+                if updateSourceURL != nil { finalizeInstallation(action: .updateExisting) }
+            }
             else { installationQueue.append(pending) }
             return
         }
@@ -782,6 +864,9 @@ class DownloadManager: NSObject, ObservableObject {
                 pendingInstallation = installationQueue.isEmpty ? nil : installationQueue.removeFirst()
                 refreshFileList()
                 refreshInstalledApps()
+                if pendingInstallation?.updateSourceURL != nil {
+                    finalizeInstallation(action: .updateExisting)
+                }
             }
             do {
                 switch action {
@@ -832,6 +917,10 @@ class DownloadManager: NSObject, ObservableObject {
                     return
                 }
                 removeSourceAfterInstall(pending.sourceArchiveURL)
+                if let source = pending.updateSourceURL {
+                    updateTargets[source.absoluteString] = nil
+                    saveUpdateTargets()
+                }
             } catch {
                 // Keep both the source IPA and any recovery backup after a failure.
                 sendNotification(title: "Installation Failed", body: error.localizedDescription, type: .error)
@@ -905,9 +994,9 @@ extension DownloadManager: URLSessionDownloadDelegate {
                 downloadedFile = final
                 self.downloadFileIndex[source.absoluteString] = final.lastPathComponent
                 self.saveDownloadFileIndex()
-                if self.isAutoUnzipEnabled && final.pathExtension.lowercased() == "ipa" {
+                if (self.isAutoUnzipEnabled || self.updateTargets[source.absoluteString] != nil) && final.pathExtension.lowercased() == "ipa" {
                     self.extractingFiles.insert(final)
-                    try await self.extractApp(from: final)
+                    try await self.extractApp(from: final, updateSourceURL: self.updateTargets[source.absoluteString] != nil ? source : nil)
                 }
                 if self.tasks[source]?.taskIdentifier == identifier {
                     self.tasks[source] = nil

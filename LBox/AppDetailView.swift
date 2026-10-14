@@ -331,7 +331,7 @@ struct DownloadButton: View {
         case .processing:
             ProgressView().frame(minWidth: 44, minHeight: 44).accessibilityLabel("Preparing app")
         case .failed:
-            Button("Retry") { downloadManager.startDownload(url: url) }
+            Button("Retry") { beginDownloadOrUpdate(url: url) }
                 .buttonStyle(LBoxCapsuleButtonStyle())
         case .none:
             if preferOpen, downloadManager.isAppInstalled(bundleID: app.bundleIdentifier), !updateAvailable {
@@ -340,6 +340,9 @@ struct DownloadButton: View {
                     else { showSetupNeeded = true }
                 }
                 .buttonStyle(LBoxCapsuleButtonStyle())
+            } else if updateAvailable {
+                Button("Update") { beginDownloadOrUpdate(url: url) }
+                    .buttonStyle(LBoxCapsuleButtonStyle())
             } else if downloadManager.getLocalFile(for: url) != nil {
                 Button { showShareSheet = true } label: {
                     Label("File", systemImage: "doc")
@@ -347,9 +350,20 @@ struct DownloadButton: View {
                 }
                 .buttonStyle(LBoxCapsuleButtonStyle())
             } else {
-                Button(updateAvailable ? "Update" : "Get") { downloadManager.startDownload(url: url) }
+                Button("Get") { downloadManager.startDownload(url: url) }
                     .buttonStyle(LBoxCapsuleButtonStyle())
             }
+        }
+    }
+
+    private func beginDownloadOrUpdate(url: URL) {
+        if updateAvailable,
+           let installed = downloadManager.installedApps.first(where: {
+               $0.bundleID == app.bundleIdentifier && $0.name == app.name
+           }) ?? downloadManager.installedApps.first(where: { $0.bundleID == app.bundleIdentifier }) {
+            downloadManager.updateApp(installed, from: url, version: app.version)
+        } else {
+            downloadManager.startDownload(url: url)
         }
     }
 

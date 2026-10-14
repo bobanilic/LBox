@@ -84,7 +84,7 @@ struct EnhancedContentView: View {
         }
         .onChange(of: downloadManager.pendingInstallation?.id) { _, newID in
             if newID != nil {
-                showConflictAlert = true
+                showConflictAlert = downloadManager.pendingInstallation?.updateSourceURL == nil
             } else {
                 showConflictAlert = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

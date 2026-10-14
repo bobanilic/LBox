@@ -31,7 +31,7 @@ struct ContentView: View {
             // Watch pendingInstallation to trigger local alert state
             .onChange(of: downloadManager.pendingInstallation?.id) { _, newID in
                 if newID != nil {
-                    showConflictAlert = true
+                    showConflictAlert = downloadManager.pendingInstallation?.updateSourceURL == nil
                 } else {
                     showConflictAlert = false
                     // Present recovery for this installation only, after the conflict alert dismisses.
@@ -755,7 +755,7 @@ struct FileRow: View {
         HStack {
             Image(systemName: isArchive ? "archivebox.fill" : "doc.fill").foregroundStyle(.blue)
             VStack(alignment: .leading) {
-                Text(localURL.lastPathComponent).lineLimit(1)
+                Text(manager.downloadDisplayName(for: localURL)).lineLimit(1)
                 if isExtracting {
                     Text("Extracting...").font(.caption2).foregroundColor(.secondary)
                 }

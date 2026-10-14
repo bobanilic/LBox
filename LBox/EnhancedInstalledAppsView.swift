@@ -122,7 +122,7 @@ struct EnhancedInstalledAppsView: View {
                       $0.version.compare(target, options: .numeric) == .orderedSame
                   }),
                   let url = URL(string: match.downloadURL), urls.insert(url).inserted else { continue }
-            downloadManager.startDownload(url: url)
+            downloadManager.updateApp(app, from: url, version: match.version)
         }
         if !urls.isEmpty { selectedTab = 2 }
     }
@@ -196,7 +196,10 @@ private struct EnhancedInstalledAppItem: View {
             .buttonStyle(.plain)
 
             Button {
-                if newVersion != nil, let source = updateSourceMatch { downloadIPA(source) }
+                if newVersion != nil, let source = updateSourceMatch,
+                   let url = URL(string: source.downloadURL) {
+                    downloadManager.updateApp(app, from: url, version: source.version)
+                }
                 else { launchApp() }
             } label: {
                 Text(newVersion == nil ? "Open" : "Update")
