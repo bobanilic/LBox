@@ -17,6 +17,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Quick Offline Regression Checks
+        run: bash tests/run-quick-checks.sh
+
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
@@ -46,3 +49,4 @@ jobs:
             _Automated build #${{ github.run_number }}_
           tag_name: build-${{ github.run_number }}
           files: LBox.ipa
+

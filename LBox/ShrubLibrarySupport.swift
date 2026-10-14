@@ -14,11 +14,8 @@ final class ShrubLibraryAppStoreViewModel: AppStoreViewModel {
 
         Task {
             do {
-                let urls = try await ShrubLibraryCatalogResolver.discoverRepositoryURLs(from: url)
-                guard !urls.isEmpty else {
-                    super.addRepo(url: url, parentID: parentID)
-                    return
-                }
+                let urls = try await ShrubLibraryCatalogResolver.shared.discoverRepositoryURLs(from: url)
+                guard !urls.isEmpty else { throw URLError(.cannotParseResponse) }
 
                 if let existingID = shrubFolderID(in: savedRepos) {
                     replaceShrubFolderChildren(folderID: existingID, with: urls)
@@ -40,8 +37,7 @@ final class ShrubLibraryAppStoreViewModel: AppStoreViewModel {
                 saveRepos()
                 await super.fetchAllRepos()
             } catch {
-                print("ShrubLibrary import failed: \(error)")
-                super.addRepo(url: url, parentID: parentID)
+                NotificationManager.shared.show(title: "ShrubLibrary Import Failed", message: error.localizedDescription, type: .error)
             }
         }
     }
@@ -97,12 +93,11 @@ final class ShrubLibraryAppStoreViewModel: AppStoreViewModel {
             for index in nodes.indices {
                 if nodes[index].id == folderID {
                     let existing = nodes[index].children ?? []
-                    let existingByURL = Dictionary(
-                        uniqueKeysWithValues: existing.compactMap { child -> (String, SavedRepo)? in
-                            guard let url = child.url else { return nil }
-                            return (url.absoluteString, child)
+                    let existingByURL = existing.reduce(into: [String: SavedRepo]()) { result, child in
+                        if let url = child.url, result[url.absoluteString] == nil {
+                            result[url.absoluteString] = child
                         }
-                    )
+                    }
 
                     nodes[index].children = urls.map { url in
                         existingByURL[url.absoluteString] ?? SavedRepo(url: url)
@@ -120,10 +115,10 @@ final class ShrubLibraryAppStoreViewModel: AppStoreViewModel {
     }
 
     private func refreshShrubLibraryCatalogIfNeeded() async {
-        guard let folderID = shrubFolderID(in: savedRepos) else { return }
+        guard let folderID = shrubFolderID(in: savedRepos), getRepo(folderID)?.isEnabled == true else { return }
 
         do {
-            let urls = try await ShrubLibraryCatalogResolver.discoverRepositoryURLs(from: Self.shrubRootURL)
+            let urls = try await ShrubLibraryCatalogResolver.shared.discoverRepositoryURLs(from: Self.shrubRootURL)
             guard !urls.isEmpty else { return }
             replaceShrubFolderChildren(folderID: folderID, with: urls)
             saveRepos()
@@ -134,26 +129,67 @@ final class ShrubLibraryAppStoreViewModel: AppStoreViewModel {
     }
 }
 
-private enum ShrubLibraryCatalogResolver {
+actor ShrubLibraryCatalogResolver {
+    static let shared = ShrubLibraryCatalogResolver()
+    private struct CachedCatalog: Codable {
+        let urls: [URL]
+        let date: Date
+    }
+    private var cached: [String: CachedCatalog] = [:]
+    private var inFlight: [String: Task<[URL], Error>] = [:]
+    private let cacheFile: URL
+
+    private init() {
+        cacheFile = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("shrub-catalog-cache.json")
+        if let data = try? Data(contentsOf: cacheFile),
+           let saved = try? JSONDecoder().decode([String: CachedCatalog].self, from: data) {
+            cached = saved
+        }
+    }
+
+    func discoverRepositoryURLs(from rootURL: URL) async throws -> [URL] {
+        let key = Self.canonicalize(rootURL).absoluteString
+        if let entry = cached[key], Date().timeIntervalSince(entry.date) < 6 * 3600 { return entry.urls }
+        if let running = inFlight[key] { return try await running.value }
+        let knownURLs = Set(cached[key]?.urls ?? [])
+        let task = Task { try await Self.resolveCatalog(from: rootURL, knownURLs: knownURLs) }
+        inFlight[key] = task
+        defer { inFlight[key] = nil }
+        do {
+            let urls = try await task.value
+            guard !urls.isEmpty else { throw URLError(.cannotParseResponse) }
+            cached[key] = CachedCatalog(urls: urls, date: Date())
+            if let data = try? JSONEncoder().encode(cached) {
+                try? FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? data.write(to: cacheFile, options: .atomic)
+            }
+            return urls
+        } catch {
+            // A failed/partial crawl must never replace the last known catalog.
+            if let entry = cached[key] { return entry.urls }
+            throw error
+        }
+    }
+
     private static let shrubHost = "shrublibrary.pages.dev"
     private static let userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 LBox/1.0"
 
-    static func discoverRepositoryURLs(from rootURL: URL) async throws -> [URL] {
+    private static func resolveCatalog(from rootURL: URL, knownURLs: Set<URL>) async throws -> [URL] {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadRevalidatingCacheData
-        configuration.timeoutIntervalForRequest = 20
-        configuration.timeoutIntervalForResource = 30
+        configuration.timeoutIntervalForRequest = 8
+        configuration.timeoutIntervalForResource = 10
         let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let deadline = Date().addingTimeInterval(30)
 
-        let html = try await fetchText(rootURL, session: session)
+        let html = try await fetchText(rootURL, session: session, deadline: deadline)
         var payloads = [html]
 
         let scriptURLs = extractScriptURLs(from: html, relativeTo: rootURL)
-        for scriptURL in scriptURLs.prefix(12) {
-            if let text = try? await fetchText(scriptURL, session: session) {
-                payloads.append(text)
-            }
-        }
+        let scripts = await fetchTexts(Array(scriptURLs.prefix(12)), session: session, deadline: deadline)
+        payloads.append(contentsOf: scripts.map { $0.1 })
 
         // If the bundle loads its catalog from a same-origin data/API endpoint,
         // inspect those responses as well. This keeps the importer independent
@@ -165,11 +201,8 @@ private enum ShrubLibraryCatalogResolver {
             }
         }
 
-        for endpoint in endpointSet.prefix(24) {
-            if let text = try? await fetchText(endpoint, session: session) {
-                payloads.append(text)
-            }
-        }
+        let endpoints = await fetchTexts(Array(endpointSet).sorted { $0.absoluteString < $1.absoluteString }.prefix(24).map { $0 }, session: session, deadline: deadline)
+        payloads.append(contentsOf: endpoints.map { $0.1 })
 
         var candidates = Set<URL>()
         for payload in payloads {
@@ -183,21 +216,52 @@ private enum ShrubLibraryCatalogResolver {
             }
         }
 
-        return candidates.sorted {
-            $0.absoluteString.localizedCaseInsensitiveCompare($1.absoluteString) == .orderedAscending
+        let ordered = candidates.sorted { $0.absoluteString < $1.absoluteString }
+        let responses = await fetchTexts(ordered, session: session, deadline: deadline)
+        guard Date() < deadline else { throw URLError(.timedOut) }
+        // Hints identify candidates only; a real feed must successfully decode.
+        let verified = responses.compactMap { url, text -> URL? in
+            guard let data = text.data(using: .utf8),
+                  (try? JSONDecoder().decode(RepoResponse.self, from: data)) != nil else { return nil }
+            return url
         }
+        // Keep previously verified feeds still listed by the site through transient feed failures.
+        return Set(verified).union(knownURLs.intersection(candidates))
+            .sorted { $0.absoluteString < $1.absoluteString }
     }
 
-    private static func fetchText(_ url: URL, session: URLSession) async throws -> String {
+    private static func fetchTexts(_ urls: [URL], session: URLSession, deadline: Date) async -> [(URL, String)] {
+        var results: [(URL, String)] = []
+        // Small batches bound network concurrency and respect a total discovery deadline.
+        for offset in stride(from: 0, to: urls.count, by: 6) {
+            guard Date() < deadline, !Task.isCancelled else { break }
+            let batch = Array(urls[offset..<min(offset + 6, urls.count)])
+            let fetched = await withTaskGroup(of: (URL, String)?.self) { group in
+                for url in batch {
+                    group.addTask {
+                        guard let text = try? await fetchText(url, session: session, deadline: deadline) else { return nil }
+                        return (url, text)
+                    }
+                }
+                var values: [(URL, String)] = []
+                for await result in group { if let result { values.append(result) } }
+                return values
+            }
+            results.append(contentsOf: fetched)
+        }
+        return results
+    }
+
+    private static func fetchText(_ url: URL, session: URLSession, deadline: Date) async throws -> String {
+        try Task.checkCancellation()
+        guard Date() < deadline else { throw URLError(.timedOut) }
         var request = URLRequest(url: url)
-        request.timeoutInterval = 20
+        request.timeoutInterval = min(8, max(0.1, deadline.timeIntervalSinceNow))
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html,application/json,text/javascript,*/*;q=0.8", forHTTPHeaderField: "Accept")
-
         let (data, response) = try await session.data(for: request)
-        if let http = response as? HTTPURLResponse, !(200..<400).contains(http.statusCode) {
-            throw URLError(.badServerResponse)
-        }
+        try DownloadFileIdentity.validate(response)
+        guard data.count <= 16 * 1024 * 1024 else { throw URLError(.dataLengthExceedsMaximum) }
         return String(decoding: data, as: UTF8.self)
     }
 
@@ -342,3 +406,4 @@ private enum ShrubLibraryCatalogResolver {
         }
     }
 }
+

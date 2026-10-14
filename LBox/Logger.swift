@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import SwiftUI
 
+@MainActor
 class Logger: ObservableObject {
     static let shared = Logger()
     

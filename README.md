@@ -50,6 +50,20 @@
 
 ## 🛠 How it Works
 
+### Fork reliability update (1.3.3)
+
+Downloads now use a persistent URL-to-file index so equal filenames from different sources cannot collide. Files downloaded by older builds remain in the Downloads list for manual extraction or sharing; they are not guessed to belong to a particular source URL.
+
+Failed updates retain their recovery backup and source IPA. Replacement failures roll back the installed bundle, and metadata changes are written atomically and verified before temporary containers are removed. Deleting a recovery backup does not delete user data.
+
+Repository refreshes support mixed legacy/AltStore feeds and recalculate updates even when the app count is unchanged. ShrubLibrary discovery validates feeds, uses up to six parallel requests, caches its catalog for six hours, and retains the last known catalog on failure.
+
+### Quick checks
+
+On macOS with Xcode installed, run `bash tests/run-quick-checks.sh`. These offline checks exercise production decoding, download state transitions, HTTP validation, file identity, and injected update/rollback failures. They also run before the existing GitHub IPA build.
+
+Device checks: pause/resume an IPA; lock the phone during a download and reopen LBox; install a larger IPA while scrolling; update an existing LiveContainer app and confirm its data survives; refresh a repository containing a newer version without adding apps; add ShrubLibrary and refresh again.
+
 1.  **Initial Setup**: Upon first launch, LBox will ask for the LiveContainer directory. Select the root folder of your installed LiveContainer app. This step is required for auto-installation and launching apps.
 2.  **Add a Source**: Input a URL to a compliant app repository JSON **or** add a "Folder" utilizing a list URL to batch-import repos.
 3.  **Browse & Download**: Find the app you want and tap "Get". LBox handles the download in the background.
@@ -106,3 +120,4 @@ If you find this project useful:
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+

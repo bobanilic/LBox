@@ -16,6 +16,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Quick Offline Regression Checks
+        run: bash tests/run-quick-checks.sh
+
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
@@ -39,3 +42,4 @@ jobs:
           name: LBox-IPA  # Название архива, который вы скачаете с GitHub
           path: LBox.ipa
           retention-days: 7 # (Опционально) Сколько дней хранить файл
+

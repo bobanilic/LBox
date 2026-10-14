@@ -31,6 +31,7 @@ struct InAppNotification: Identifiable, Equatable {
     }
 }
 
+@MainActor
 class NotificationManager: ObservableObject {
     static let shared = NotificationManager()
     
@@ -117,3 +118,4 @@ struct InAppNotificationView: View {
         }
     }
 }
+

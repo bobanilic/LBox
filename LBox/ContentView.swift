@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject private var viewModel = AppStoreViewModel()
-    @StateObject private var downloadManager = DownloadManager()
+    @StateObject private var downloadManager = DownloadManager.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: Int = 0
     @State private var showSetupAlert = false
@@ -23,7 +23,7 @@ struct ContentView: View {
             InAppNotificationView()
         }
         .task { await performInitialSetup() }
-        .onChange(of: viewModel.displayApps.count) { _ in viewModel.checkForUpdates(installedApps: downloadManager.installedApps) }
+        .onChange(of: viewModel.catalogRevision) { _ in viewModel.checkForUpdates(installedApps: downloadManager.installedApps) }
         .onChange(of: downloadManager.installedApps) { newApps in viewModel.checkForUpdates(installedApps: newApps) }
         .onChange(of: showSetupPicker) { isPresented in checkForPickerFailure(isPresented: isPresented) }
         .onChange(of: scenePhase) { phase in handleScenePhase(phase) }
@@ -58,7 +58,7 @@ struct ContentView: View {
                 }
                 Button("Cancel Update (Restore)") { downloadManager.restoreBackup(backup) }
                 // Modified to separate delete logic to optionally delete containers
-                Button("Delete Backup", role: .destructive) { downloadManager.discardBackup(backup, deleteContainers: true) }
+                Button("Delete Backup", role: .destructive) { downloadManager.discardBackup(backup) }
             } message: { backup in
                 Text("Please run '\(backup.appName)' in LiveContainer to finalize the update, and then return to LBox.\n\nIf you have already run it and the update is not detected, you can try again or restore the previous version.")
             }
@@ -602,6 +602,10 @@ struct DownloadRow: View {
                     Text("Paused").font(.caption).foregroundColor(.orange)
                 case .waitingForConnection:
                     Text("Waiting...").font(.caption).foregroundColor(.red)
+                case .processing:
+                    Text("Preparing...").font(.caption).foregroundColor(.secondary)
+                case .failed(let message):
+                    Text(message).font(.caption).foregroundColor(.red).lineLimit(2)
                 case .none:
                     EmptyView()
                 }
@@ -609,6 +613,7 @@ struct DownloadRow: View {
             Spacer()
             Button {
                 if case .paused = status { downloadManager.resumeDownload(url: url) }
+                else if case .failed = status { downloadManager.startDownload(url: url) }
                 else if case .waitingForConnection = status { downloadManager.pauseDownload(url: url) }
                 else { downloadManager.pauseDownload(url: url) }
             } label: {
@@ -617,9 +622,13 @@ struct DownloadRow: View {
                     if case .downloading(let p, _, _) = status {
                         Circle().trim(from: 0.0, to: CGFloat(max(0.01, p))).stroke(style: StrokeStyle(lineWidth: 3, lineCap: .round)).rotationEffect(.degrees(270)).foregroundColor(.blue)
                     }
-                    Image(systemName: (status == .paused || status == .waitingForConnection) ? "play.fill" : "pause.fill").font(.system(size: 10))
+                    if case .failed = status {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 10))
+                    } else {
+                        Image(systemName: status == .paused ? "play.fill" : "pause.fill").font(.system(size: 10))
+                    }
                 }.frame(width: 28, height: 28)
-            }.buttonStyle(.plain)
+            }.buttonStyle(.plain).disabled(status == .processing)
             Button { downloadManager.cancelDownload(url: url) } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.gray).font(.title3) }.buttonStyle(.plain)
         }.padding(.vertical, 4)
     }
@@ -750,7 +759,7 @@ struct SettingsView: View {
                     Button("Import Repos (JSON)") { showImporter = true }
                 }
                 Section("About") {
-                    Text("LBox v1.3.2 Preview")
+                    Text("LBox v1.3.3 Preview")
                     #if DEBUG
                     NavigationLink("Debug Logs") { DebugLogView() }
                     #endif
@@ -1105,4 +1114,5 @@ struct MoveRepoSheet: View { let itemToMove: SavedRepo; @ObservedObject var view
 struct AddRepoSheet: View { @ObservedObject var viewModel: AppStoreViewModel; let parentID: String?; @Environment(\.dismiss) var dismiss; @State private var mode = 0; @State private var textInput = ""; @State private var folderName = ""; @State private var folderLink = ""; var body: some View { NavigationStack { Form { Picker("Add", selection: $mode) { Text("Sources").tag(0); Text("Folder").tag(1) }.pickerStyle(.segmented); if mode == 0 { Section(header: Text("URLs (One per line)")) { TextEditor(text: $textInput).frame(height: 150).autocorrectionDisabled().textInputAutocapitalization(.never); Button("Paste from Clipboard") { if let s = UIPasteboard.general.string { textInput = s } } } } else { Section(header: Text("New Folder")) { TextField("Name", text: $folderName); TextField("Link URL (Optional)", text: $folderLink).autocorrectionDisabled().textInputAutocapitalization(.never).keyboardType(.URL) }; Section(footer: Text("If a link is provided, this folder will automatically populate with repositories from that URL (one per line).")) { EmptyView() } } }.navigationTitle("Add").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { if mode == 0 { let lines = textInput.components(separatedBy: .newlines); for line in lines { let t = line.trimmingCharacters(in: .whitespacesAndNewlines); if !t.isEmpty { let fixed = (!t.lowercased().hasPrefix("http") ? "https://" + t : t); if let u = URL(string: fixed) { viewModel.addRepo(url: u, parentID: parentID) } } } } else { let link = folderLink.trimmingCharacters(in: .whitespacesAndNewlines); var finalName = folderName.trimmingCharacters(in: .whitespacesAndNewlines); if finalName.isEmpty && !link.isEmpty { finalName = link; if finalName.lowercased().hasPrefix("https://") { finalName = String(finalName.dropFirst(8)) } else if finalName.lowercased().hasPrefix("http://") { finalName = String(finalName.dropFirst(7)) } }; if !finalName.isEmpty { let url = link.isEmpty ? nil : URL(string: (!link.lowercased().hasPrefix("http") ? "https://" + link : link)); viewModel.addFolder(name: finalName, parentID: parentID, repoListURL: url) } }; dismiss() } } } } } }
 struct ImportJSONView: View { @ObservedObject var viewModel: AppStoreViewModel; @Environment(\.dismiss) var dismiss; @State private var text = ""; var body: some View { NavigationStack { Form { TextEditor(text: $text).frame(height: 300); Button("Paste") { if let s = UIPasteboard.general.string { text = s } } }.navigationTitle("Import JSON").toolbar { Button("Import") { viewModel.importReposJSON(text); dismiss() } } } } }
 struct ShareSheet: UIViewControllerRepresentable { let activityItems: [Any]; func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: activityItems, applicationActivities: nil) }; func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {} }
+
 

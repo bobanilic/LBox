@@ -1,8 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-extension AppSortOption: Sendable {}
-
 private enum EnhancedStoreLayout: String, CaseIterable, Identifiable {
     case list
     case three
@@ -41,7 +39,7 @@ private enum EnhancedStoreLayout: String, CaseIterable, Identifiable {
 
 struct EnhancedContentView: View {
     @StateObject private var viewModel = ShrubLibraryAppStoreViewModel()
-    @StateObject private var downloadManager = DownloadManager()
+    @StateObject private var downloadManager = DownloadManager.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: Int = 0
     @State private var showSetupAlert = false
@@ -60,11 +58,14 @@ struct EnhancedContentView: View {
             InAppNotificationView()
         }
         .task { await performInitialSetup() }
-        .onChange(of: viewModel.displayApps.count) { _ in
+        .onChange(of: viewModel.catalogRevision) { _ in
             viewModel.checkForUpdates(installedApps: downloadManager.installedApps)
         }
         .onChange(of: downloadManager.installedApps) { newApps in
             viewModel.checkForUpdates(installedApps: newApps)
+        }
+        .onChange(of: downloadManager.recoveryFailure) { _ in
+            verificationBackup = downloadManager.pendingBackups.last
         }
         .onChange(of: showSetupPicker) { isPresented in
             checkForPickerFailure(isPresented: isPresented)
@@ -96,7 +97,7 @@ struct EnhancedContentView: View {
                 downloadManager.restoreBackup(backup)
             }
             Button("Delete Backup", role: .destructive) {
-                downloadManager.discardBackup(backup, deleteContainers: true)
+                downloadManager.discardBackup(backup)
             }
         } message: { backup in
             Text("Please run '\(backup.appName)' in LiveContainer to finalize the update, and then return to LBox.\n\nIf you have already run it and the update is not detected, you can try again or restore the previous version.")
@@ -683,3 +684,4 @@ private struct EnhancedStoreListRow: View {
             .background(Color(.secondarySystemBackground), in: Capsule())
     }
 }
+
