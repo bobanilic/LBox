@@ -40,7 +40,7 @@ private enum EnhancedStoreLayout: String, CaseIterable, Identifiable {
 }
 
 struct EnhancedContentView: View {
-    @StateObject private var viewModel = AppStoreViewModel()
+    @StateObject private var viewModel = ShrubLibraryAppStoreViewModel()
     @StateObject private var downloadManager = DownloadManager()
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: Int = 0
