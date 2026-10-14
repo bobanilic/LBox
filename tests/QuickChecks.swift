@@ -7,7 +7,10 @@ struct InAppNotification {
 }
 @MainActor final class NotificationManager {
     static let shared = NotificationManager()
-    func show(title: String, message: String, type: InAppNotification.NotificationType) {}
+    var errors: [String] = []
+    func show(title: String, message: String, type: InAppNotification.NotificationType) {
+        if case .error = type { errors.append("\(title): \(message)") }
+    }
 }
 @MainActor final class Logger {
     static let shared = Logger()
@@ -280,7 +283,10 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
         try writePlist(["CFBundleIdentifier": "test.cached", "CFBundleShortVersionString": "2.0"], to: cachedPreparedApp.appendingPathComponent("Info.plist"))
         let preparedFixture = PreparedAppArchive(root: cachedPayload.deletingLastPathComponent(), payload: cachedPayload, app: cachedPreparedApp, bundleID: "test.cached")
         let cachedUpdates = DownloadManager(configuration: config, prepareArchive: { source, folder in
-            guard source == cachedIPA && folder == appsFolder else { throw CheckError.failed("Cached Update must reuse its downloaded IPA") }
+            guard source.standardizedFileURL.path == cachedIPA.standardizedFileURL.path,
+                  folder.standardizedFileURL.path == appsFolder.standardizedFileURL.path else {
+                throw CheckError.failed("Cached Update must reuse its downloaded IPA")
+            }
             return preparedFixture
         })
         cachedUpdates.customDownloadFolder = root
@@ -308,7 +314,7 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         try expect(!cachedUpdates.extractingFiles.contains(cachedIPA) && cachedUpdates.pendingInstallation == nil, "Cached Update must finish without a conflict dialog")
-        try expect(cachedUpdates.installedApps.first { $0.url.lastPathComponent == "SelectedTwin.app" }?.version == "2.0", "Cached Update must replace the selected installation")
+        try expect(cachedUpdates.installedApps.first { $0.url.lastPathComponent == "SelectedTwin.app" }?.version == "2.0", "Cached Update must replace the selected installation. Last error: \(NotificationManager.shared.errors.last ?? "none")")
         try expect(cachedUpdates.installedApps.first { $0.url.lastPathComponent == "OtherTwin.app" }?.version == "1.0", "Another app with the same bundle ID must stay unchanged")
         try expect(cachedUpdates.pendingBackups.count == 1 && cachedUpdates.pendingBackups[0].replacementCompleted == true, "Cached Update must retain a recovery bundle for launch preparation")
         let cachedMetadata = try PropertyListSerialization.propertyList(from: Data(contentsOf: selected.url.appendingPathComponent("LCAppInfo.plist")), format: nil) as! [String: Any]
