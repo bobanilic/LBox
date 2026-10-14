@@ -226,15 +226,17 @@ class DownloadManager: NSObject, ObservableObject {
         refreshInstalledApps()
         
         let bundleID = backup.bundleID
-        guard isAppInstalled(bundleID: bundleID) else {
-            Logger.shared.log("CheckUpdate: App \(bundleID) not installed.")
+        guard let app = installedApps.first(where: {
+            $0.bundleID == bundleID && $0.url.lastPathComponent == backup.originalInstallPath
+        }) else {
+            Logger.shared.log("CheckUpdate: Original installation of \(bundleID) not found.")
             return false
         }
         
-        if hasLCAppInfo(bundleID: bundleID) {
+        if FileManager.default.fileExists(atPath: app.url.appendingPathComponent("LCAppInfo.plist").path) {
             // Verify if the plist is actually new (created after backup)
             // This prevents using a plist that might have come with the IPA or wasn't removed correctly
-            if let app = installedApps.first(where: { $0.bundleID == bundleID }) {
+            do {
                 let plistURL = app.url.appendingPathComponent("LCAppInfo.plist")
                 
                 // 1. Check Creation Date
@@ -292,7 +294,9 @@ class DownloadManager: NSObject, ObservableObject {
     
     func finalizeUpdate(_ backup: AppBackup) {
         guard !finalizingUpdates.contains(backup.id),
-              let app = installedApps.first(where: { $0.bundleID == backup.bundleID }) else { return }
+              let app = installedApps.first(where: {
+                  $0.bundleID == backup.bundleID && $0.url.lastPathComponent == backup.originalInstallPath
+              }) else { return }
         finalizingUpdates.insert(backup.id)
         let newInfo = app.url.appendingPathComponent("LCAppInfo.plist")
         let oldInfo = backupDirectory.appendingPathComponent(backup.backupPath)

@@ -237,6 +237,11 @@ enum CheckError: Error { case failed(String), injectedWriteFailure }
             let retryMetadata = try PropertyListSerialization.propertyList(from: Data(contentsOf: retryApp.appendingPathComponent("LCAppInfo.plist")), format: nil) as! [String: Any]
             try expect(retryMetadata["LCDataUUID"] as? String == "retained", "Retries must preserve the original data container")
         }
+        var readyMetadata = originalInfo
+        readyMetadata["LCPatchRevision"] = 7
+        try writePlist(readyMetadata, to: retryApp.appendingPathComponent("LCAppInfo.plist"))
+        let missingInstallation = AppBackup(bundleID: "test.retry", appName: "Sibling", version: "1.0", backupPath: "absent-backup", originalInstallPath: "Sibling.app", date: .distantPast, hadLCAppInfo: true, replacementCompleted: true)
+        try expect(!downloads.checkUpdateStatus(for: missingInstallation), "A separate app with the same bundle ID must not finalize another installation's backup")
         downloads.downloadStates[first] = .paused
         downloads.resumeDownload(url: first)
         try expect(downloads.isDownloading(url: first), "A paused task without resume data must restart without recursion")
