@@ -15,14 +15,14 @@ enum AppSortOption: String, CaseIterable, Identifiable, Sendable {
     case name = "Name"
     case date = "Date"
     case size = "Size"
-    
+
     var id: String { rawValue }
 }
 
 enum RepoSortOption: String, CaseIterable, Identifiable {
     case standard = "Default"
     case name = "Name"
-    
+
     var id: String { rawValue }
 }
 
@@ -43,9 +43,9 @@ struct AppItem: Codable, Identifiable, Hashable, Sendable {
     let iconURL: String?
     let localizedDescription: String?
     let screenshotURLs: [String]
-    
+
     var sourceRepoName: String? = nil
-    
+
     enum CodingKeys: String, CodingKey {
         case name, bundleIdentifier, bundleID
         case version, versionDate, size, downloadURL
@@ -54,7 +54,7 @@ struct AppItem: Codable, Identifiable, Hashable, Sendable {
         case screenshotURLs, screenshots
         case sourceRepoName
     }
-    
+
     init(
         name: String,
         bundleIdentifier: String,
@@ -78,11 +78,11 @@ struct AppItem: Codable, Identifiable, Hashable, Sendable {
         self.screenshotURLs = screenshotURLs
         self.sourceRepoName = sourceRepoName
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
-        
+
         if let bid = try? container.decode(String.self, forKey: .bundleIdentifier) {
             bundleIdentifier = bid
         } else if let bid = try? container.decode(String.self, forKey: .bundleID) {
@@ -90,20 +90,20 @@ struct AppItem: Codable, Identifiable, Hashable, Sendable {
         } else {
             bundleIdentifier = "unknown.bundle.id"
         }
-        
+
         version = try container.decode(String.self, forKey: .version)
         versionDate = try container.decodeIfPresent(String.self, forKey: .versionDate)
         size = try container.decodeIfPresent(Int64.self, forKey: .size)
         downloadURL = try container.decode(String.self, forKey: .downloadURL)
-        
+
         if let iUrl = try? container.decode(String.self, forKey: .iconURL) {
             iconURL = iUrl
         } else {
             iconURL = try container.decodeIfPresent(String.self, forKey: .icon)
         }
-        
+
         localizedDescription = try container.decodeIfPresent(String.self, forKey: .localizedDescription)
-        
+
         if let screens = try? container.decode([String].self, forKey: .screenshotURLs) {
             screenshotURLs = screens
         } else if let screens = try? container.decode([String].self, forKey: .screenshots) {
@@ -111,10 +111,10 @@ struct AppItem: Codable, Identifiable, Hashable, Sendable {
         } else {
             screenshotURLs = []
         }
-        
+
         sourceRepoName = try container.decodeIfPresent(String.self, forKey: .sourceRepoName)
     }
-    
+
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
@@ -150,21 +150,21 @@ private struct AltStoreVersionRecord: Decodable, Sendable {
     let date: String?
     let size: Int64?
     let downloadURL: String
-    
+
     enum CodingKeys: String, CodingKey {
         case version, date, versionDate, size, downloadURL
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         version = try container.decode(String.self, forKey: .version)
-        
+
         if let primaryDate = try container.decodeIfPresent(String.self, forKey: .date) {
             date = primaryDate
         } else {
             date = try container.decodeIfPresent(String.self, forKey: .versionDate)
         }
-        
+
         size = try container.decodeIfPresent(Int64.self, forKey: .size)
         downloadURL = try container.decode(String.self, forKey: .downloadURL)
     }
@@ -178,7 +178,7 @@ private struct AltStoreAppRecord: Decodable, Sendable {
     let subtitle: String?
     let screenshotURLs: [String]
     let versions: [AltStoreVersionRecord]
-    
+
     enum CodingKeys: String, CodingKey {
         case name, bundleIdentifier, bundleID
         case iconURL, icon
@@ -186,11 +186,11 @@ private struct AltStoreAppRecord: Decodable, Sendable {
         case screenshotURLs, screenshots
         case versions
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
-        
+
         if let primaryBundleID = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier) {
             bundleIdentifier = primaryBundleID
         } else if let alternateBundleID = try container.decodeIfPresent(String.self, forKey: .bundleID) {
@@ -198,22 +198,22 @@ private struct AltStoreAppRecord: Decodable, Sendable {
         } else {
             bundleIdentifier = "unknown.bundle.id"
         }
-        
+
         if let primaryIcon = try container.decodeIfPresent(String.self, forKey: .iconURL) {
             iconURL = primaryIcon
         } else {
             iconURL = try container.decodeIfPresent(String.self, forKey: .icon)
         }
-        
+
         localizedDescription = try container.decodeIfPresent(String.self, forKey: .localizedDescription)
         subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
-        
+
         if let primaryScreenshots = try container.decodeIfPresent([String].self, forKey: .screenshotURLs) {
             screenshotURLs = primaryScreenshots
         } else {
             screenshotURLs = try container.decodeIfPresent([String].self, forKey: .screenshots) ?? []
         }
-        
+
         versions = try container.decodeIfPresent([AltStoreVersionRecord].self, forKey: .versions) ?? []
     }
 }
@@ -245,24 +245,24 @@ struct RepoResponse: Decodable, Sendable {
     let iconURL: String?
     let META: MetaData?
     let apps: [AppItem]
-    
+
     enum CodingKeys: String, CodingKey {
         case name, identifier, iconURL, META, apps
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown Source"
         identifier = try container.decodeIfPresent(String.self, forKey: .identifier)
         iconURL = try container.decodeIfPresent(String.self, forKey: .iconURL)
         META = try container.decodeIfPresent(MetaData.self, forKey: .META)
-        
+
         // Decode each entry independently: a feed may mix legacy and versions[] records.
         let records = try container.decode([RepoAppRecord].self, forKey: .apps)
         apps = records.flatMap { $0.releases }
 
     }
-    
+
     var bestIconURL: String? {
         iconURL ?? META?.repoIcon
     }
@@ -274,13 +274,13 @@ struct ExportableRepo: Codable {
     let isEnabled: Bool?
     let children: [ExportableRepo]?
     let repoListURL: URL?
-    
+
     init(_ repo: SavedRepo, onlyEnabled: Bool = false) {
         self.name = repo.name
         self.url = repo.url
         if onlyEnabled { self.isEnabled = nil } else { self.isEnabled = repo.isEnabled }
         self.repoListURL = repo.repoListURL
-        
+
         // If this is a remote folder (has repoListURL), do not include children in export
         if repo.repoListURL != nil {
             self.children = nil
@@ -291,12 +291,12 @@ struct ExportableRepo: Codable {
             self.children = nil
         }
     }
-    
+
     enum CodingKeys: String, CodingKey {
         case name, url, isEnabled, children
         case repoListURL = "childrenUrl"
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.name = try container.decode(String.self, forKey: .name)
@@ -305,7 +305,7 @@ struct ExportableRepo: Codable {
         self.children = try container.decodeIfPresent([ExportableRepo].self, forKey: .children)
         self.repoListURL = try container.decodeIfPresent(URL.self, forKey: .repoListURL)
     }
-    
+
     func toSavedRepo() -> SavedRepo {
         let enabled = isEnabled ?? true
         if repoListURL != nil || children != nil {
@@ -328,17 +328,17 @@ struct SavedRepo: Codable, Identifiable, Hashable, Sendable {
     var isEnabled: Bool
     var children: [SavedRepo]?
     var appCount: Int = 0
-    
+
     var repoListURL: URL? // URL for subscription folder source
-    
+
     // Cache the apps to persist between launches
     var cachedApps: [AppItem]? = nil
-    
+
     var fetchStatus: RepoFetchStatus = .idle
-    
+
     var isFolder: Bool { children != nil }
     var isRemoteFolder: Bool { repoListURL != nil }
-    
+
     var totalAppCount: Int {
         if let children = children {
             return children.reduce(0) { $0 + $1.totalAppCount }
@@ -346,7 +346,7 @@ struct SavedRepo: Codable, Identifiable, Hashable, Sendable {
             return isEnabled ? appCount : 0
         }
     }
-    
+
     // Counts the number of repos (leaves) inside recursively
     var totalRepoCount: Int {
         if let children = children {
@@ -355,19 +355,19 @@ struct SavedRepo: Codable, Identifiable, Hashable, Sendable {
             return 1
         }
     }
-    
+
     var hasEnabledContent: Bool {
         if !isEnabled { return false }
         if let children = children { return children.contains { $0.hasEnabledContent } }
         return true
     }
-    
+
     var hasDisabledContentRecursive: Bool {
         if !isEnabled { return true }
         if let children = children { return children.contains { $0.hasDisabledContentRecursive } }
         return false
     }
-    
+
     func allURLs(onlyEnabled: Bool = false) -> String {
         if onlyEnabled && !isEnabled { return "" }
         if let children = children {
@@ -382,25 +382,25 @@ struct SavedRepo: Codable, Identifiable, Hashable, Sendable {
         case id, name, url, iconURL, isEnabled, children, appCount, cachedApps
         case repoListURL = "childrenUrl"
     }
-    
+
     init(url: URL, name: String? = nil, iconURL: String? = nil, isEnabled: Bool = true, appCount: Int = 0) {
         self.id = url.absoluteString; self.url = url; self.name = name ?? "Unknown"; self.iconURL = iconURL; self.isEnabled = isEnabled; self.children = nil; self.appCount = appCount
         self.repoListURL = nil
         self.cachedApps = nil
     }
-    
+
     init(folderName: String, children: [SavedRepo] = [], repoListURL: URL? = nil) {
         self.id = UUID().uuidString; self.name = folderName; self.url = nil; self.iconURL = nil; self.isEnabled = true; self.children = children; self.appCount = 0
         self.repoListURL = repoListURL
         self.cachedApps = nil
     }
-    
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if let idVal = try? container.decode(String.self, forKey: .id) { self.id = idVal }
         else if let urlVal = try? container.decode(URL.self, forKey: .url) { self.id = urlVal.absoluteString }
         else { self.id = UUID().uuidString }
-        
+
         self.url = try container.decodeIfPresent(URL.self, forKey: .url)
         self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Unknown"
         self.iconURL = try container.decodeIfPresent(String.self, forKey: .iconURL)
@@ -410,7 +410,7 @@ struct SavedRepo: Codable, Identifiable, Hashable, Sendable {
         self.cachedApps = try container.decodeIfPresent([AppItem].self, forKey: .cachedApps)
         self.repoListURL = try container.decodeIfPresent(URL.self, forKey: .repoListURL)
     }
-    
+
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id); try container.encode(name, forKey: .name); try container.encode(url, forKey: .url)
@@ -419,17 +419,16 @@ struct SavedRepo: Codable, Identifiable, Hashable, Sendable {
         try container.encode(cachedApps, forKey: .cachedApps)
         try container.encode(repoListURL, forKey: .repoListURL)
     }
-    
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id); hasher.combine(name); hasher.combine(url); hasher.combine(iconURL)
         hasher.combine(isEnabled); hasher.combine(children); hasher.combine(appCount); hasher.combine(fetchStatus)
         hasher.combine(repoListURL)
     }
-    
+
     static func == (lhs: SavedRepo, rhs: SavedRepo) -> Bool {
         return lhs.id == rhs.id && lhs.name == rhs.name && lhs.url == rhs.url && lhs.iconURL == rhs.iconURL &&
                lhs.isEnabled == rhs.isEnabled && lhs.children == rhs.children && lhs.appCount == rhs.appCount && lhs.fetchStatus == rhs.fetchStatus &&
                lhs.repoListURL == rhs.repoListURL
     }
 }
-
