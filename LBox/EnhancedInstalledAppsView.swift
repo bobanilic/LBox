@@ -5,33 +5,62 @@ struct EnhancedInstalledAppsView: View {
     @Binding var selectedTab: Int
     @ObservedObject var viewModel: AppStoreViewModel
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 80, maximum: 100), spacing: 20, alignment: .top)
-    ]
+    @State private var sourceIndex: [String: [AppItem]] = [:]
+    @State private var sourceGeneration = 0
+
+    private var updateApps: [LocalApp] {
+        downloadManager.installedApps.filter { viewModel.availableUpdates[$0.bundleID] != nil }
+    }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            List {
+                Section {
+                    Text("Your installed apps, together.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                }
+                if !updateApps.isEmpty {
+                    Section {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(updateApps.count) updates available")
+                                    .font(.headline)
+                                Text("Ready when you are.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Update All", action: updateAll)
+                                .buttonStyle(LBoxCapsuleButtonStyle())
+                                .disabled(sourceIndex.isEmpty)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
                 if downloadManager.installedApps.isEmpty {
                     ContentUnavailableView(
                         "No Apps",
                         systemImage: "square.dashed",
                         description: Text("Apps extracted to the applications folder will appear here.")
                     )
-                    .padding(.top, 50)
+                    .listRowBackground(Color.clear)
                 } else {
-                    LazyVGrid(columns: columns, spacing: 24) {
+                    Section("Installed") {
                         ForEach(downloadManager.installedApps) { app in
                             EnhancedInstalledAppItem(
                                 app: app,
                                 selectedTab: $selectedTab,
-                                viewModel: viewModel
+                                viewModel: viewModel,
+                                sourceMatches: sourceIndex[app.bundleID.lowercased()] ?? []
                             )
                         }
                     }
-                    .padding()
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Apps")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -42,11 +71,55 @@ struct EnhancedInstalledAppsView: View {
                     }
                     .accessibilityLabel("Check Updates")
                 }
+                ToolbarItem(placement: .topBarTrailing) { LBoxSettingsButton() }
             }
             .refreshable {
                 downloadManager.refreshInstalledApps()
+                viewModel.checkForUpdates(installedApps: downloadManager.installedApps)
+            }
+            .task(id: viewModel.catalogRevision) { await rebuildSourceIndex() }
+            .onChange(of: downloadManager.installedApps) { _, _ in
+                Task { await rebuildSourceIndex() }
             }
         }
+    }
+
+    private func rebuildSourceIndex() async {
+        sourceGeneration += 1
+        let generation = sourceGeneration
+        let candidates = viewModel.allAppsByVariant.values.flatMap { $0 }
+        let bundles = Set(downloadManager.installedApps.map { $0.bundleID.lowercased() })
+        let index = await Task.detached(priority: .userInitiated) {
+            var groups: [String: [AppItem]] = [:]
+            var seen = Set<String>()
+            for app in candidates {
+                let bundle = app.bundleIdentifier.lowercased()
+                guard bundles.contains(bundle), seen.insert(bundle + "|" + app.downloadURL).inserted else { continue }
+                groups[bundle, default: []].append(app)
+            }
+            for bundle in Array(groups.keys) {
+                groups[bundle]?.sort {
+                    let version = $0.version.compare($1.version, options: .numeric)
+                    if version != .orderedSame { return version == .orderedDescending }
+                    if $0.versionDate != $1.versionDate { return ($0.versionDate ?? "") > ($1.versionDate ?? "") }
+                    if $0.sourceRepoName != $1.sourceRepoName { return ($0.sourceRepoName ?? "") < ($1.sourceRepoName ?? "") }
+                    return $0.downloadURL < $1.downloadURL
+                }
+            }
+            return groups
+        }.value
+        guard !Task.isCancelled, generation == sourceGeneration else { return }
+        sourceIndex = index
+    }
+
+    private func updateAll() {
+        var urls = Set<URL>()
+        for app in updateApps {
+            guard let match = sourceIndex[app.bundleID.lowercased()]?.first,
+                  let url = URL(string: match.downloadURL), urls.insert(url).inserted else { continue }
+            downloadManager.startDownload(url: url)
+        }
+        if !urls.isEmpty { selectedTab = 2 }
     }
 }
 
@@ -54,6 +127,7 @@ private struct EnhancedInstalledAppItem: View {
     let app: LocalApp
     @Binding var selectedTab: Int
     @ObservedObject var viewModel: AppStoreViewModel
+    let sourceMatches: [AppItem]
     @EnvironmentObject private var downloadManager: DownloadManager
 
     @State private var showSetupNeeded = false
@@ -63,16 +137,6 @@ private struct EnhancedInstalledAppItem: View {
 
     private var newVersion: String? {
         viewModel.availableUpdates[app.bundleID]
-    }
-
-    private var sourceMatches: [AppItem] {
-        var seen = Set<String>()
-        let matches = viewModel.allAppsByVariant.values
-            .flatMap { $0 }
-            .filter { $0.bundleIdentifier.caseInsensitiveCompare(app.bundleID) == .orderedSame }
-            .filter { seen.insert($0.downloadURL).inserted }
-
-        return matches.sorted(by: sourceSort)
     }
 
     private var exactSourceMatch: AppItem? {
@@ -97,74 +161,45 @@ private struct EnhancedInstalledAppItem: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
-            Button(action: launchApp) {
-                VStack(spacing: 6) {
-                    ZStack(alignment: .topTrailing) {
-                        if let icon = app.iconURL,
-                           let data = try? Data(contentsOf: icon),
-                           let image = UIImage(data: data) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .frame(width: 70, height: 70)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        } else {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Color(.secondarySystemBackground))
-                                Image(systemName: "app.fill")
-                                    .font(.system(size: 34))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(width: 70, height: 70)
-                        }
+        HStack(spacing: 12) {
+            CachedRemoteImage(url: app.iconURL, contentMode: .fill, placeholderSystemImage: "app.fill")
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
 
-                        if newVersion != nil {
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 12, height: 12)
-                                .offset(x: 4, y: -4)
-                        }
-                    }
-
+            Button {
+                if let source = preferredSourceMatch { storeApp = source }
+                else { launchApp() }
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(app.name)
-                        .font(.caption)
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
-                        .frame(height: 35, alignment: .top)
+                    Text(newVersion.map { "Update available · v\($0)" } ?? "Installed · v\(app.version ?? "Unknown")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
 
-            HStack(spacing: 5) {
-                if newVersion != nil {
-                    Button {
-                        storeApp = latestSourceMatch
-                    } label: {
-                        Text("Update")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .frame(height: 24)
-                            .background(Color.accentColor, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Menu {
-                    ipaActions
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 30, height: 24)
-                        .background(Color(.secondarySystemBackground), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("IPA options for \(app.name)")
+            Button {
+                if newVersion != nil, let source = latestSourceMatch { downloadIPA(source) }
+                else { launchApp() }
+            } label: {
+                Text(newVersion == nil ? "Open" : "Update")
             }
-            .frame(minHeight: 24)
+            .buttonStyle(LBoxCapsuleButtonStyle())
+            .disabled(newVersion != nil && latestSourceMatch == nil)
+
+            Menu { ipaActions } label: {
+                Image(systemName: "ellipsis")
+                    .frame(minWidth: 30, minHeight: 44)
+            }
+            .accessibilityLabel("Options for \(app.name)")
         }
+        .padding(.vertical, 6)
         .contextMenu {
             ipaActions
         }
@@ -205,7 +240,7 @@ private struct EnhancedInstalledAppItem: View {
             Button {
                 storeApp = preferred
             } label: {
-                Label("View in Store", systemImage: "bag")
+                Label("View in Browse", systemImage: "square.grid.2x2")
             }
 
             if let localIPA {
@@ -249,7 +284,7 @@ private struct EnhancedInstalledAppItem: View {
                 viewModel.searchText = app.bundleID
                 selectedTab = 0
             } label: {
-                Label("Search Store", systemImage: "magnifyingglass")
+                Label("Search Browse", systemImage: "magnifyingglass")
             }
 
             Divider()
@@ -353,3 +388,4 @@ private struct EnhancedInstalledAppItem: View {
         return lhs.downloadURL < rhs.downloadURL
     }
 }
+

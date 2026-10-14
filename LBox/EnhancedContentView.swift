@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-private enum EnhancedStoreLayout: String, CaseIterable, Identifiable {
+enum EnhancedStoreLayout: String, CaseIterable, Identifiable {
     case list
     case three
     case four
@@ -42,6 +42,8 @@ struct EnhancedContentView: View {
     @StateObject private var downloadManager = DownloadManager.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: Int = 0
+    @State private var showSettings = false
+    @AppStorage("kLBoxAppearance") private var appearanceRaw = LBoxAppearance.automatic.rawValue
     @State private var showSetupAlert = false
     @State private var showSetupPicker = false
     @State private var showFilePickerHelp = false
@@ -57,23 +59,30 @@ struct EnhancedContentView: View {
 
             InAppNotificationView()
         }
+        .environment(\.openLBoxSettings, { showSettings = true })
+        .preferredColorScheme(LBoxAppearance(rawValue: appearanceRaw)?.colorScheme)
+        .sheet(isPresented: $showSettings) {
+            SettingsView(viewModel: viewModel, isPresentedAsSheet: true)
+                .environmentObject(downloadManager)
+                .preferredColorScheme(LBoxAppearance(rawValue: appearanceRaw)?.colorScheme)
+        }
         .task { await performInitialSetup() }
-        .onChange(of: viewModel.catalogRevision) { _ in
+        .onChange(of: viewModel.catalogRevision) { _, _ in
             viewModel.checkForUpdates(installedApps: downloadManager.installedApps)
         }
-        .onChange(of: downloadManager.installedApps) { newApps in
+        .onChange(of: downloadManager.installedApps) { _, newApps in
             viewModel.checkForUpdates(installedApps: newApps)
         }
-        .onChange(of: downloadManager.recoveryFailure) { _ in
+        .onChange(of: downloadManager.recoveryFailure) { _, _ in
             verificationBackup = downloadManager.pendingBackups.last
         }
-        .onChange(of: showSetupPicker) { isPresented in
+        .onChange(of: showSetupPicker) { _, isPresented in
             checkForPickerFailure(isPresented: isPresented)
         }
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase) { _, phase in
             handleScenePhase(phase)
         }
-        .onChange(of: downloadManager.pendingInstallation?.id) { newID in
+        .onChange(of: downloadManager.pendingInstallation?.id) { _, newID in
             if newID != nil {
                 showConflictAlert = true
             } else {
@@ -149,23 +158,30 @@ struct EnhancedContentView: View {
     private var mainTabView: some View {
         TabView(selection: $selectedTab) {
             EnhancedStoreView(viewModel: viewModel)
-                .tabItem { Label("Store", systemImage: "bag") }
+                .tabItem { Label("Browse", systemImage: "square.grid.2x2") }
                 .tag(0)
 
             EnhancedInstalledAppsView(selectedTab: $selectedTab, viewModel: viewModel)
-                .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
+                .tabItem { Label("Apps", systemImage: "square.stack.3d.up") }
+                .badge(viewModel.availableUpdates.count)
                 .tag(1)
 
             DirectDownloadView(viewModel: viewModel)
-                .tabItem { Label("Download", systemImage: "arrow.down.circle") }
+                .tabItem { Label("Downloads", systemImage: "arrow.down.to.line") }
+                .badge(downloadManager.downloadStates.values.filter { status in
+                    switch status {
+                    case .downloading, .paused, .waitingForConnection, .processing: return true
+                    case .none, .failed: return false
+                    }
+                }.count)
                 .tag(2)
 
-            SettingsView(viewModel: viewModel)
-                .tabItem { Label("Settings", systemImage: "gear") }
+            NavigationStack {
+                RepoManagementView(viewModel: viewModel, parentID: nil)
+            }
+                .tabItem { Label("Sources", systemImage: "folder") }
                 .tag(3)
         }
-        .toolbarBackground(Color(.systemBackground), for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
     }
 
     private var updateAlertBinding: Binding<Bool> {
@@ -215,13 +231,13 @@ struct EnhancedContentView: View {
 
 private struct EnhancedStoreView: View {
     @ObservedObject var viewModel: AppStoreViewModel
-    @AppStorage("kStoreLayoutMode") private var layoutRawValue = EnhancedStoreLayout.three.rawValue
+    @AppStorage("kStoreLayoutMode") private var layoutRawValue = EnhancedStoreLayout.list.rawValue
 
     @State private var orderedApps: [AppItem] = []
     @State private var sortGeneration = 0
 
     private var layout: EnhancedStoreLayout {
-        EnhancedStoreLayout(rawValue: layoutRawValue) ?? .three
+        EnhancedStoreLayout(rawValue: layoutRawValue) ?? .list
     }
 
     private var gridColumns: [GridItem] {
@@ -234,10 +250,34 @@ private struct EnhancedStoreView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    Text("Good apps. From sources you choose.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 14)
                     storeControls
                         .padding(.horizontal, 18)
                         .padding(.top, 4)
                         .padding(.bottom, 16)
+
+                    if viewModel.searchText.isEmpty, let app = orderedApps.first {
+                        spotlight(app)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 22)
+                    }
+
+                    if !orderedApps.isEmpty {
+                        HStack {
+                            Text("Your catalog").font(.title3.weight(.bold))
+                            Spacer()
+                            Text("\(orderedApps.count) apps")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+                    }
 
                     if orderedApps.isEmpty && !viewModel.isLoading {
                         ContentUnavailableView(
@@ -249,14 +289,11 @@ private struct EnhancedStoreView: View {
                     } else if layout == .list {
                         LazyVStack(spacing: 0) {
                             ForEach(orderedApps) { app in
-                                NavigationLink(destination: AppDetailView(app: app, viewModel: viewModel)) {
-                                    EnhancedStoreListRow(app: app)
-                                }
-                                .buttonStyle(.plain)
+                                EnhancedStoreListRow(app: app, viewModel: viewModel)
 
                                 if app.id != orderedApps.last?.id {
                                     Divider()
-                                        .padding(.leading, 102)
+                                        .padding(.leading, 76)
                                 }
                             }
                         }
@@ -276,17 +313,52 @@ private struct EnhancedStoreView: View {
                     }
                 }
             }
-            .background(Color(.systemBackground))
-            .navigationTitle("Store")
-            .searchable(text: $viewModel.searchText, prompt: "Search apps, bundles...")
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Browse")
+            .searchable(text: $viewModel.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search apps or bundle IDs")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { LBoxSettingsButton() }
+            }
             .refreshable { await viewModel.fetchAllRepos() }
             .onReceive(viewModel.$filteredApps) { apps in
                 scheduleSort(apps)
             }
-            .onChange(of: viewModel.appSortOrder) { _ in
+            .onChange(of: viewModel.appSortOrder) { _, _ in
                 scheduleSort(viewModel.filteredApps)
             }
         }
+    }
+
+    private func spotlight(_ app: AppItem) -> some View {
+        NavigationLink(destination: AppDetailView(app: app, viewModel: viewModel)) {
+            HStack(spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("FROM YOUR SOURCES")
+                        .font(.caption2.weight(.semibold))
+                        .tracking(1.2)
+                        .foregroundStyle(.secondary)
+                    Text(app.name)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    Text(app.sourceRepoName ?? "Version \(app.version)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Label("View app", systemImage: "arrow.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                Spacer(minLength: 0)
+                CachedRemoteImage(url: URL(string: app.iconURL ?? ""), contentMode: .fill, placeholderSystemImage: "app.fill")
+                    .frame(width: 76, height: 76)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     private var storeControls: some View {
@@ -321,7 +393,7 @@ private struct EnhancedStoreView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 11)
-                    .frame(height: 34)
+                    .frame(minHeight: 44)
                     .background(Color(.secondarySystemBackground), in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -341,7 +413,7 @@ private struct EnhancedStoreView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 10)
-                    .frame(height: 34)
+                    .frame(minHeight: 44)
                     .background(Color(.secondarySystemBackground), in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -362,17 +434,13 @@ private struct EnhancedStoreView: View {
                     Image(systemName: layout.systemImage)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                        .frame(width: 34, height: 34)
+                        .frame(width: 44, height: 44)
                         .background(Color(.secondarySystemBackground), in: Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Store layout")
+                .accessibilityLabel("Catalog layout")
 
-                Spacer(minLength: 1)
 
-                Text("\(orderedApps.count)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
             }
 
             if viewModel.isLoading && viewModel.fetchTotal > 0 {
@@ -594,94 +662,36 @@ private struct EnhancedStoreGridTile: View {
 
 private struct EnhancedStoreListRow: View {
     let app: AppItem
-
-    @EnvironmentObject private var downloadManager: DownloadManager
-
-    private var updateAvailable: Bool {
-        guard let installed = downloadManager.getInstalledVersion(bundleID: app.bundleIdentifier) else {
-            return false
-        }
-        return app.version.compare(installed, options: .numeric) == .orderedDescending
-    }
-
-    private var installed: Bool {
-        downloadManager.isAppInstalled(bundleID: app.bundleIdentifier)
-    }
+    @ObservedObject var viewModel: AppStoreViewModel
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            CachedRemoteImage(
-                url: URL(string: app.iconURL ?? ""),
-                contentMode: .fill,
-                placeholderSystemImage: "app.fill"
-            )
-            .frame(width: 70, height: 70)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(app.name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                if let description = app.localizedDescription, !description.isEmpty {
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                Text(metadataText)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            VStack(alignment: .trailing, spacing: 7) {
-                if updateAvailable {
-                    listStatus("UPDATE", foreground: .accentColor)
-                } else if installed {
-                    listStatus("INSTALLED", foreground: .secondary)
-                }
-
-                if let size = app.size {
-                    Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            NavigationLink(destination: AppDetailView(app: app, viewModel: viewModel)) {
+                HStack(spacing: 12) {
+                    CachedRemoteImage(url: URL(string: app.iconURL ?? ""), contentMode: .fill, placeholderSystemImage: "app.fill")
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(app.name)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
+                        Text("v\(app.version) · \(app.sourceRepoName ?? "Source")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        if let size = app.size {
+                            Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .buttonStyle(.plain)
+            DownloadButton(app: app, compact: true, preferOpen: true)
         }
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
-    }
-
-    private var metadataText: String {
-        var parts = ["v\(app.version)"]
-
-        if let date = app.versionDate, !date.isEmpty {
-            parts.append(date)
-        }
-
-        if let source = app.sourceRepoName, !source.isEmpty {
-            parts.append(source)
-        }
-
-        return parts.joined(separator: " • ")
-    }
-
-    private func listStatus(_ title: String, foreground: Color) -> some View {
-        Text(title)
-            .font(.system(size: 9, weight: .bold, design: .rounded))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 7)
-            .frame(height: 21)
-            .background(Color(.secondarySystemBackground), in: Capsule())
+        .padding(.vertical, 12)
     }
 }
-

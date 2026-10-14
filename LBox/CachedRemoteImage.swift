@@ -25,6 +25,14 @@ actor LBoxImagePipeline {
             return cached as Data
         }
         
+        if url.isFileURL {
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: url)
+            memoryCache.setObject(data as NSData, forKey: url as NSURL, cost: data.count)
+            return data
+        }
+
         var request = URLRequest(url: url)
         request.cachePolicy = .returnCacheDataElseLoad
         request.timeoutInterval = 20
@@ -76,3 +84,4 @@ struct CachedRemoteImage: View {
         }
     }
 }
+

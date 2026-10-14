@@ -25,7 +25,7 @@ struct AppDetailView: View {
             }
             .padding(.top, 10)
         }
-        .background(Color(.systemBackground))
+        .background(Color(.systemGroupedBackground))
         .navigationBarTitleDisplayMode(.inline)
         .alert("Setup Required", isPresented: $showSetupNeeded) {
             Button("Open LiveContainer") {
@@ -48,10 +48,10 @@ struct AppDetailView: View {
                     contentMode: .fill,
                     placeholderSystemImage: "app.fill"
                 )
-                .frame(width: 116, height: 116)
-                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .frame(width: 90, height: 90)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
                 }
                 
@@ -93,7 +93,7 @@ struct AppDetailView: View {
                             .font(.headline.weight(.bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 24)
-                            .frame(height: 38)
+                            .frame(minHeight: 44)
                             .background(Color.accentColor, in: Capsule())
                     }
                     .buttonStyle(.plain)
@@ -154,7 +154,7 @@ struct AppDetailView: View {
                     }
                 }
             }
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .padding(.horizontal, 18)
         }
     }
@@ -252,96 +252,112 @@ struct FileShareSheet: UIViewControllerRepresentable {
 struct DownloadButton: View {
     let app: AppItem
     var compact: Bool = false
+    var preferOpen: Bool = false
     @EnvironmentObject var downloadManager: DownloadManager
     @State private var showShareSheet = false
-    
+    @State private var showSetupNeeded = false
+
+    private var updateAvailable: Bool {
+        guard let version = downloadManager.getInstalledVersion(bundleID: app.bundleIdentifier) else { return false }
+        return app.version.compare(version, options: .numeric) == .orderedDescending
+    }
+
     var body: some View {
-        let downloadURL = URL(string: app.downloadURL)
-        
         Group {
-            if let url = downloadURL, let localURL = downloadManager.getLocalFile(for: url) {
-                Button {
-                    showShareSheet = true
-                } label: {
-                    if compact {
-                        Image(systemName: "doc.fill")
-                            .font(.body.bold())
-                            .foregroundColor(.secondary)
-                            .frame(width: 28, height: 28)
-                            .background(Color.gray.opacity(0.15))
-                            .clipShape(Circle())
-                    } else {
-                        Label("File", systemImage: "doc.fill")
-                            .font(.headline)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 20)
-                            .background(Color.gray.opacity(0.15))
-                            .foregroundColor(.primary)
-                            .clipShape(Capsule())
-                    }
-                }
-                .sheet(isPresented: $showShareSheet) {
-                    FileShareSheet(activityItems: [prepareFileForShare(localURL)])
-                }
-            } else if let url = downloadURL, case .downloading(let progress, _, _) = downloadManager.getStatus(for: url) {
-                Button {
-                    downloadManager.pauseDownload(url: url)
-                } label: {
-                    ZStack {
-                        Circle().stroke(lineWidth: 3).opacity(0.2).foregroundColor(.blue)
-                        Circle().trim(from: 0.0, to: CGFloat(max(0.01, progress)))
-                            .stroke(style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                            .foregroundColor(.blue).rotationEffect(Angle(degrees: 270.0)).animation(.linear, value: progress)
-                        Image(systemName: "pause.fill").font(.system(size: compact ? 10 : 14)).foregroundColor(.blue)
-                    }
-                    .frame(width: compact ? 28 : 32, height: compact ? 28 : 32)
-                }
-            } else if let url = downloadURL, case .paused = downloadManager.getStatus(for: url) {
-                Button {
-                    downloadManager.resumeDownload(url: url)
-                } label: {
-                    ZStack {
-                        Circle().stroke(lineWidth: 3).opacity(0.2).foregroundColor(.blue)
-                        Image(systemName: "play.fill").font(.system(size: compact ? 10 : 14)).foregroundColor(.blue)
-                    }
-                    .frame(width: compact ? 28 : 32, height: compact ? 28 : 32)
-                }
-            } else if let url = downloadURL, case .waitingForConnection = downloadManager.getStatus(for: url) {
-                Button {
-                    downloadManager.pauseDownload(url: url)
-                } label: {
-                    ZStack {
-                        Circle().stroke(lineWidth: 3).opacity(0.2).foregroundColor(.orange)
-                        Image(systemName: "wifi.slash").font(.system(size: compact ? 10 : 14)).foregroundColor(.orange)
-                    }
-                    .frame(width: compact ? 28 : 32, height: compact ? 28 : 32)
-                }
+            if let url = URL(string: app.downloadURL) {
+                control(url: url)
             } else {
-                Button(action: {
-                    if let url = downloadURL {
-                        downloadManager.startDownload(url: url)
-                    }
-                }) {
-                    Text("GET")
-                        .font(compact ? .caption.bold() : .headline.bold())
-                        .foregroundColor(.blue)
-                        .padding(.horizontal, compact ? 16 : 24)
-                        .padding(.vertical, compact ? 6 : 6)
-                        .background(Color.blue.opacity(0.15))
-                        .clipShape(Capsule())
+                Text("Unavailable")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = URL(string: app.downloadURL), let file = downloadManager.getLocalFile(for: url) {
+                FileShareSheet(activityItems: [prepareFileForShare(file)])
+            }
+        }
+        .alert("Finish App Setup", isPresented: $showSetupNeeded) {
+            Button("Open LiveContainer", action: openInstalledApp)
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Open this app once in LiveContainer, then return to LBox.")
+        }
+    }
+
+    @ViewBuilder
+    private func control(url: URL) -> some View {
+        switch downloadManager.getStatus(for: url) {
+        case .downloading(let progress, _, _):
+            Button { downloadManager.pauseDownload(url: url) } label: {
+                ZStack {
+                    Circle().stroke(Color.accentColor.opacity(0.2), lineWidth: 3)
+                    Circle().trim(from: 0, to: CGFloat(min(1, max(0.01, progress))))
+                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Image(systemName: "pause.fill").font(.caption)
                 }
+                .frame(width: 28, height: 28)
+                .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Pause download")
+            .accessibilityValue("\(Int(progress * 100)) percent")
+        case .paused:
+            Button { downloadManager.resumeDownload(url: url) } label: { Image(systemName: "play.fill").frame(width: 44, height: 44) }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Resume download")
+        case .waitingForConnection:
+            Button { downloadManager.pauseDownload(url: url) } label: { Image(systemName: "wifi.slash").frame(width: 44, height: 44) }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Waiting for connection. Pause download")
+        case .processing:
+            ProgressView().frame(minWidth: 44, minHeight: 44).accessibilityLabel("Preparing app")
+        case .failed:
+            Button("Retry") { downloadManager.startDownload(url: url) }
+                .buttonStyle(LBoxCapsuleButtonStyle())
+        case .none:
+            if preferOpen, downloadManager.isAppInstalled(bundleID: app.bundleIdentifier), !updateAvailable {
+                Button("Open") {
+                    if downloadManager.hasLCAppInfo(bundleID: app.bundleIdentifier) { openInstalledApp() }
+                    else { showSetupNeeded = true }
+                }
+                .buttonStyle(LBoxCapsuleButtonStyle())
+            } else if downloadManager.getLocalFile(for: url) != nil {
+                Button { showShareSheet = true } label: {
+                    Label("File", systemImage: "doc")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(LBoxCapsuleButtonStyle())
+            } else {
+                Button(updateAvailable ? "Update" : "Get") { downloadManager.startDownload(url: url) }
+                    .buttonStyle(LBoxCapsuleButtonStyle())
             }
         }
     }
-    
+
+    private func openInstalledApp() {
+        guard let name = downloadManager.getInstalledAppName(bundleID: app.bundleIdentifier) else { return }
+        var components = URLComponents()
+        components.scheme = "livecontainer"
+        components.host = "livecontainer-launch"
+        components.queryItems = [URLQueryItem(name: "bundle-name", value: name)]
+        if let url = components.url { UIApplication.shared.open(url) }
+    }
+
     func prepareFileForShare(_ url: URL) -> URL {
-        let fileManager = FileManager.default
-        let tempDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try? fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let manager = FileManager.default
+        let tempDir = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let tempFile = tempDir.appendingPathComponent(url.lastPathComponent)
-        try? fileManager.removeItem(at: tempFile)
-        try? fileManager.copyItem(at: url, to: tempFile)
-        return tempFile
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        do {
+            try manager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            try manager.copyItem(at: url, to: tempFile)
+            return tempFile
+        } catch {
+            downloadManager.sendNotification(title: "Unable to Share IPA", body: error.localizedDescription, type: .error)
+            return url
+        }
     }
 }
-

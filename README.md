@@ -58,6 +58,18 @@ Failed updates retain their recovery backup and source IPA. Replacement failures
 
 Repository refreshes support mixed legacy/AltStore feeds and recalculate updates even when the app count is unchanged. ShrubLibrary discovery validates feeds, uses up to six parallel requests, caches its catalog for six hours, and retains the last known catalog on failure.
 
+### Native interface redesign (1.4.0)
+
+The four main tabs are Browse, Apps, Downloads, and Sources. The toolbar gear opens the complete Settings screen. Automatic, light, and dark appearances use system colors and native navigation controls.
+
+Browse keeps source filtering, search, name/date/size sorting, and list/3/4/5-column layouts. An existing layout preference is retained; List is the default for a fresh installation. App details keep screenshots, descriptions, bundle identifiers, all available versions, downloads, and IPA sharing.
+
+Apps shows installed versions, Open/Update buttons, and Update All. The options menu retains source details, installed/latest IPA downloads, sharing, URL copying, bundle-ID searching, and app deletion. Update All downloads available updates through the existing installation and recovery workflow; automatic installation still follows the Auto .ipa to .app setting.
+
+Downloads separates active transfers from failures and keeps pause/resume/retry/cancel, URL downloads, file import, rename, sharing, extraction, deletion, and clearing files. Preparing an app disables duplicate transfer actions. Sources retains folders, remote lists, all switches, editing, moving, copying, import/export, and error details.
+
+All existing preference/bookmark keys and repository caches are unchanged. Existing Settings controls remain: both storage directories and their Default actions, Auto .ipa to .app, Strict Grouping, repository sorting, Manage Sources, every repository export mode, JSON import, reset, and debug logs in debug builds. Appearance, catalog layout, and app sorting are now also accessible in Settings.
+
 ### Quick checks
 
 On macOS with Xcode installed, run `bash tests/run-quick-checks.sh`. These offline checks exercise production decoding, download state transitions, HTTP validation, file identity, and injected update/rollback failures. They also run before the existing GitHub IPA build.

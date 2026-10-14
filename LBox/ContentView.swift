@@ -23,13 +23,13 @@ struct ContentView: View {
             InAppNotificationView()
         }
         .task { await performInitialSetup() }
-        .onChange(of: viewModel.catalogRevision) { _ in viewModel.checkForUpdates(installedApps: downloadManager.installedApps) }
-        .onChange(of: downloadManager.installedApps) { newApps in viewModel.checkForUpdates(installedApps: newApps) }
-        .onChange(of: showSetupPicker) { isPresented in checkForPickerFailure(isPresented: isPresented) }
-        .onChange(of: scenePhase) { phase in handleScenePhase(phase) }
+        .onChange(of: viewModel.catalogRevision) { _, _ in viewModel.checkForUpdates(installedApps: downloadManager.installedApps) }
+        .onChange(of: downloadManager.installedApps) { _, newApps in viewModel.checkForUpdates(installedApps: newApps) }
+        .onChange(of: showSetupPicker) { _, isPresented in checkForPickerFailure(isPresented: isPresented) }
+        .onChange(of: scenePhase) { _, phase in handleScenePhase(phase) }
             
             // Watch pendingInstallation to trigger local alert state
-            .onChange(of: downloadManager.pendingInstallation?.id) { newID in
+            .onChange(of: downloadManager.pendingInstallation?.id) { _, newID in
                 if newID != nil {
                     showConflictAlert = true
                 } else {
@@ -492,74 +492,164 @@ struct InstalledAppItem: View {
 struct DirectDownloadView: View {
     @ObservedObject var viewModel: AppStoreViewModel
     @EnvironmentObject var downloadManager: DownloadManager
-    @State private var urlString = ""
     @State private var renamingFile: URL?
     @State private var newFileName = ""
     @State private var showFileImporter = false
+    @State private var showDownloadLink = false
+    @State private var confirmClearFiles = false
+
+    private var activeURLs: [URL] {
+        downloadManager.downloadStates.keys.filter {
+            switch downloadManager.getStatus(for: $0) {
+            case .none, .failed: return false
+            default: return true
+            }
+        }.sorted { $0.absoluteString < $1.absoluteString }
+    }
+
+    private var failedURLs: [URL] {
+        downloadManager.downloadStates.keys.filter {
+            if case .failed = downloadManager.getStatus(for: $0) { return true }
+            return false
+        }.sorted { $0.absoluteString < $1.absoluteString }
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    TextField("https://example.com/app.ipa", text: $urlString)
-                        .textInputAutocapitalization(.never).keyboardType(.URL).autocorrectionDisabled()
-                    Button("Download") {
-                        let s = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-                        let final = (!s.lowercased().hasPrefix("http") ? "https://" + s : s)
-                        if let url = URL(string: final) { downloadManager.startDownload(url: url); urlString = "" }
-                    }.disabled(urlString.isEmpty)
-                } header: { Text("Download from URL") }
-                if !downloadManager.downloadStates.isEmpty {
-                    Section {
-                        ForEach(downloadManager.downloadStates.keys.sorted(by: { $0.absoluteString < $1.absoluteString }), id: \.self) { url in
+                    Text("From download to installed, clearly.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                    Button { showDownloadLink = true } label: {
+                        Label("Add download link", systemImage: "link")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 6)
+                    }
+                }
+                if !activeURLs.isEmpty {
+                    Section("In progress") {
+                        ForEach(activeURLs, id: \.self) { url in
                             DownloadRow(url: url, status: downloadManager.getStatus(for: url), viewModel: viewModel)
                         }
-                    } header: { Text("Active Downloads") }
+                    }
+                }
+                if !failedURLs.isEmpty {
+                    Section("Needs attention") {
+                        ForEach(failedURLs, id: \.self) { url in
+                            DownloadRow(url: url, status: downloadManager.getStatus(for: url), viewModel: viewModel)
+                        }
+                    }
                 }
                 Section {
+                    if downloadManager.fileList.isEmpty {
+                        Text("Downloaded and imported files appear here.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                     ForEach(downloadManager.fileList, id: \.self) { file in
                         FileRow(localURL: file, onRename: {
                             renamingFile = file
                             newFileName = file.lastPathComponent
                         })
                     }
-                    .onDelete { idx in idx.forEach { downloadManager.deleteFile(downloadManager.fileList[$0]) } }
+                    .onDelete { offsets in
+                        let files = downloadManager.fileList
+                        offsets.compactMap { files.indices.contains($0) ? files[$0] : nil }
+                            .forEach { downloadManager.deleteFile($0) }
+                    }
                 } header: {
                     HStack {
                         Text("Files")
                         Spacer()
                         if !downloadManager.fileList.isEmpty {
-                            Button("Clear All") { downloadManager.clearAllFiles() }.font(.caption).foregroundColor(.red)
+                            Button("Clear All") { confirmClearFiles = true }
+                                .font(.caption)
                         }
                     }
                 } footer: {
-                    Text("Loc: \(downloadManager.customDownloadFolder?.lastPathComponent ?? "Default")")
+                    Text("Saved in \(downloadManager.customDownloadFolder?.lastPathComponent ?? "the default downloads folder").")
                 }
             }
-            .navigationTitle("Direct Download")
+            .listStyle(.insetGrouped)
+            .navigationTitle("Downloads")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showFileImporter = true }) {
-                        Image(systemName: "square.and.arrow.down")
-                    }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { showDownloadLink = true } label: { Label("Download from URL", systemImage: "link") }
+                        Button { showFileImporter = true } label: { Label("Import File", systemImage: "square.and.arrow.down") }
+                    } label: { Image(systemName: "plus") }
+                    .accessibilityLabel("Add download or import file")
                 }
+                ToolbarItem(placement: .topBarTrailing) { LBoxSettingsButton() }
             }
-            .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.data, .archive]) { res in
-                if case .success(let url) = res {
-                    downloadManager.importFile(at: url)
-                }
+            .sheet(isPresented: $showDownloadLink) {
+                DownloadLinkSheet().environmentObject(downloadManager)
+            }
+            .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.data, .archive]) { result in
+                if case .success(let url) = result { downloadManager.importFile(at: url) }
             }
             .refreshable { downloadManager.refreshFileList() }
+            .confirmationDialog("Clear downloaded files?", isPresented: $confirmClearFiles, titleVisibility: .visible) {
+                Button("Clear All Files", role: .destructive) { downloadManager.clearAllFiles() }
+                Button("Cancel", role: .cancel) { }
+            }
             .alert("Rename File", isPresented: Binding(get: { renamingFile != nil }, set: { if !$0 { renamingFile = nil } })) {
                 TextField("Filename.ipa", text: $newFileName)
                 Button("Cancel", role: .cancel) { renamingFile = nil }
                 Button("Save") {
-                    if let file = renamingFile {
-                        downloadManager.renameFile(file, newName: newFileName)
-                    }
+                    if let file = renamingFile { downloadManager.renameFile(file, newName: newFileName) }
                     renamingFile = nil
                 }
             }
         }
+    }
+}
+
+private struct DownloadLinkSheet: View {
+    @EnvironmentObject var downloadManager: DownloadManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var validationError: String?
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("IPA download URL") {
+                    TextField("https://example.com/app.ipa", text: $text)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button("Paste from Clipboard") {
+                        text = UIPasteboard.general.string ?? ""
+                        validationError = nil
+                    }
+                    if let validationError { Text(validationError).font(.caption).foregroundStyle(.red) }
+                }
+            }
+            .navigationTitle("Add Download")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Download") {
+                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let value = trimmed.contains("://") ? trimmed : "https://" + trimmed
+                        guard let url = URL(string: value),
+                              let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+                              let host = url.host, !host.isEmpty else {
+                            validationError = "Enter a valid HTTP or HTTPS download URL."
+                            return
+                        }
+                        downloadManager.startDownload(url: url)
+                        dismiss()
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 
@@ -568,69 +658,85 @@ struct DownloadRow: View {
     let status: DownloadStatus
     var viewModel: AppStoreViewModel? = nil
     @EnvironmentObject var downloadManager: DownloadManager
-    func getFallbackTotalSize() -> Int64? {
-        guard let vm = viewModel else { return nil }
-        for (_, apps) in vm.allAppsByVariant {
-            if let match = apps.first(where: { $0.downloadURL == url.absoluteString }) {
-                return match.size
+
+    private var sourceApp: AppItem? {
+        viewModel?.displayApps.first { $0.downloadURL == url.absoluteString }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                CachedRemoteImage(url: URL(string: sourceApp?.iconURL ?? ""), contentMode: .fill, placeholderSystemImage: "arrow.down.doc")
+                    .frame(width: 46, height: 46)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(sourceApp?.name ?? (url.lastPathComponent.isEmpty ? url.host ?? "Download" : url.lastPathComponent))
+                        .font(.body.weight(.semibold))
+                        .lineLimit(2)
+                    Text(sourceApp?.sourceRepoName ?? url.host ?? "")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Button {
+                    switch status {
+                    case .paused: downloadManager.resumeDownload(url: url)
+                    case .failed: downloadManager.startDownload(url: url)
+                    default: downloadManager.pauseDownload(url: url)
+                    }
+                } label: {
+                    Image(systemName: actionIcon).frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(status == .processing)
+                .accessibilityLabel(actionLabel)
+                Button { downloadManager.cancelDownload(url: url) } label: {
+                    Image(systemName: "xmark.circle").frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(status == .processing)
+                .accessibilityLabel("Cancel download")
+            }
+            switch status {
+            case .downloading(let progress, let written, let total):
+                let expected = total > 0 ? total : sourceApp?.size ?? 0
+                if expected > 0 {
+                    ProgressView(value: min(1, max(0, total > 0 ? progress : Double(written) / Double(expected))))
+                    HStack {
+                        Text("\(format(written)) of \(format(expected))")
+                        Spacer()
+                        Text("\(Int(min(1, max(0, Double(written) / Double(expected))) * 100))%")
+                    }
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                } else {
+                    HStack { ProgressView(); Text("\(format(written)) downloaded").font(.caption).foregroundStyle(.secondary) }
+                }
+            case .paused: Label("Paused", systemImage: "pause.circle").font(.caption).foregroundStyle(.secondary)
+            case .waitingForConnection: Label("Waiting for connection", systemImage: "wifi.slash").font(.caption).foregroundStyle(.secondary)
+            case .processing: HStack { ProgressView(); Text("Preparing app…").font(.caption).foregroundStyle(.secondary) }
+            case .failed(let message): Text(message).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+            case .none: EmptyView()
             }
         }
-        return nil
+        .padding(.vertical, 8)
     }
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "arrow.down.doc.fill").font(.title2).foregroundColor(.blue)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(url.lastPathComponent).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
-                switch status {
-                case .downloading(let p, let written, let total):
-                    HStack(spacing: 4) {
-                        Text("\(Int(p * 100))%")
-                        Text("•")
-                        if total > 0 {
-                            Text("\(format(written)) / \(format(total))")
-                        } else {
-                            if let fallback = getFallbackTotalSize() {
-                                Text("\(format(written)) / \(format(fallback))")
-                            } else {
-                                Text(format(written))
-                            }
-                        }
-                    }
-                    .font(.caption).foregroundColor(.secondary)
-                case .paused:
-                    Text("Paused").font(.caption).foregroundColor(.orange)
-                case .waitingForConnection:
-                    Text("Waiting...").font(.caption).foregroundColor(.red)
-                case .processing:
-                    Text("Preparing...").font(.caption).foregroundColor(.secondary)
-                case .failed(let message):
-                    Text(message).font(.caption).foregroundColor(.red).lineLimit(2)
-                case .none:
-                    EmptyView()
-                }
-            }
-            Spacer()
-            Button {
-                if case .paused = status { downloadManager.resumeDownload(url: url) }
-                else if case .failed = status { downloadManager.startDownload(url: url) }
-                else if case .waitingForConnection = status { downloadManager.pauseDownload(url: url) }
-                else { downloadManager.pauseDownload(url: url) }
-            } label: {
-                ZStack {
-                    Circle().stroke(lineWidth: 3).opacity(0.3).foregroundColor(.blue)
-                    if case .downloading(let p, _, _) = status {
-                        Circle().trim(from: 0.0, to: CGFloat(max(0.01, p))).stroke(style: StrokeStyle(lineWidth: 3, lineCap: .round)).rotationEffect(.degrees(270)).foregroundColor(.blue)
-                    }
-                    if case .failed = status {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 10))
-                    } else {
-                        Image(systemName: status == .paused ? "play.fill" : "pause.fill").font(.system(size: 10))
-                    }
-                }.frame(width: 28, height: 28)
-            }.buttonStyle(.plain).disabled(status == .processing)
-            Button { downloadManager.cancelDownload(url: url) } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.gray).font(.title3) }.buttonStyle(.plain).disabled(status == .processing)
-        }.padding(.vertical, 4)
+
+    private var actionIcon: String {
+        switch status {
+        case .paused: return "play.fill"
+        case .failed: return "arrow.clockwise"
+        default: return "pause.fill"
+        }
+    }
+    private var actionLabel: String {
+        switch status {
+        case .paused: return "Resume download"
+        case .failed: return "Retry download"
+        default: return "Pause download"
+        }
     }
     func format(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
 }
@@ -655,9 +761,21 @@ struct FileRow: View {
             if isExtracting {
                 ProgressView().scaleEffect(0.8).padding(.trailing, 8)
             } else {
-                Button {
-                    tempURL = prepareShare(localURL); showShare = true
-                } label: { Image(systemName: "square.and.arrow.up").foregroundStyle(.blue) }.buttonStyle(.plain)
+                Menu {
+                    if isArchive {
+                        Button { manager.convertToApp(file: localURL) } label: { Label("Install App", systemImage: "app.badge") }
+                    }
+                    if let onRename {
+                        Button(action: onRename) { Label("Rename", systemImage: "pencil") }
+                    }
+                    Button {
+                        tempURL = prepareShare(localURL); showShare = true
+                    } label: { Label("Share", systemImage: "square.and.arrow.up") }
+                    Button(role: .destructive) { manager.deleteFile(localURL) } label: { Label("Delete", systemImage: "trash") }
+                } label: {
+                    Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Options for \(localURL.lastPathComponent)")
             }
         }
         .contextMenu {
@@ -691,7 +809,11 @@ struct FileRow: View {
 
 struct SettingsView: View {
     @ObservedObject var viewModel: AppStoreViewModel
+    var isPresentedAsSheet = false
     @EnvironmentObject var dm: DownloadManager
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("kLBoxAppearance") private var appearanceRaw = LBoxAppearance.automatic.rawValue
+    @AppStorage("kStoreLayoutMode") private var layoutRaw = EnhancedStoreLayout.list.rawValue
     @State private var showFolderImporter = false
     @State private var isPickingLiveContainer = false
     
@@ -705,6 +827,13 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("Appearance") {
+                    Picker("Theme", selection: $appearanceRaw) {
+                        ForEach(LBoxAppearance.allCases) { option in
+                            Text(option.title).tag(option.rawValue)
+                        }
+                    }
+                }
                 Section("Directories") {
                     HStack { 
                         Text("Downloads")
@@ -730,7 +859,15 @@ struct SettingsView: View {
                     }
                     Toggle("Auto .ipa to .app", isOn: $dm.isAutoUnzipEnabled)
                 }
-                Section("Store") {
+                Section("Browse") {
+                   Picker("Catalog Layout", selection: $layoutRaw) {
+                       ForEach(EnhancedStoreLayout.allCases) { option in
+                           Text(option.title).tag(option.rawValue)
+                       }
+                   }
+                   Picker("Sort Apps By", selection: $viewModel.appSortOrder) {
+                       ForEach(AppSortOption.allCases) { option in Text(option.rawValue).tag(option) }
+                   }
                    Toggle("Strict Grouping", isOn: $viewModel.strictGrouping)
                    if viewModel.strictGrouping {
                        Text("Apps with different sources, names, or descriptions will be listed separately.").font(.caption).foregroundColor(.secondary)
@@ -759,7 +896,7 @@ struct SettingsView: View {
                     Button("Import Repos (JSON)") { showImporter = true }
                 }
                 Section("About") {
-                    Text("LBox v1.3.4 Preview")
+                    LabeledContent("LBox", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.4.0")
                     #if DEBUG
                     NavigationLink("Debug Logs") { DebugLogView() }
                     #endif
@@ -767,6 +904,11 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .toolbar {
+                if isPresentedAsSheet {
+                    ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                }
+            }
             .fileImporter(isPresented: $showFolderImporter, allowedContentTypes: [.folder]) { res in 
                 if case .success(let url) = res { 
                     if isPickingLiveContainer {
@@ -777,7 +919,7 @@ struct SettingsView: View {
                     }
                 } 
             }
-            .onChange(of: showFolderImporter) { isPresented in 
+            .onChange(of: showFolderImporter) { _, isPresented in 
                 // Only run Help logic if we were picking for LiveContainer
                 if isPickingLiveContainer {
                     if !isPresented { 
@@ -842,6 +984,15 @@ struct RepoManagementView: View {
     
     var body: some View {
         List {
+            if parentID == nil {
+                Section {
+                    Text("Choose where your apps come from.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                }
+            }
             if displayedRepos.isEmpty {
                 ContentUnavailableView(
                     "No Sources",
@@ -860,8 +1011,18 @@ struct RepoManagementView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(parentID == nil ? "Sources" : "Folder")
+        .navigationTitle(parentID.flatMap { viewModel.getRepo($0)?.name } ?? "Sources")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                if parentID == nil {
+                    Button {
+                        Task { await viewModel.fetchAllRepos() }
+                    } label: { Image(systemName: "arrow.clockwise") }
+                    .disabled(viewModel.isLoading)
+                    .accessibilityLabel("Refresh all sources")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) { LBoxSettingsButton() }
             ToolbarItem(placement: .navigationBarTrailing) {
                 if !isReadOnly {
                     HStack {
@@ -933,7 +1094,7 @@ struct RepoManagementView: View {
             Spacer(minLength: 8)
             
             Toggle(
-                "",
+                repo.name,
                 isOn: Binding(
                     get: { repo.isEnabled },
                     set: { viewModel.setRepoEnabled(id: repo.id, enabled: $0) }
@@ -969,6 +1130,13 @@ struct RepoManagementView: View {
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
+                    if !repo.isEnabled {
+                        Text("Disabled").font(.caption).foregroundStyle(.secondary)
+                    } else if repo.fetchStatus == .success {
+                        Label("Up to date", systemImage: "checkmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
                     if case .error(let message) = repo.fetchStatus {
                         Text(message)
                             .font(.caption2)
@@ -995,11 +1163,11 @@ struct RepoManagementView: View {
         if repo.isFolder {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
+                    .fill(Color.accentColor.opacity(0.08))
                 
                 Image(systemName: repo.isRemoteFolder ? "folder.badge.gearshape" : "folder.fill")
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.accentColor)
             }
             .frame(width: 42, height: 42)
         } else {
